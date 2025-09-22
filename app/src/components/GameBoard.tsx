@@ -1,0 +1,401 @@
+import React, { useState, useEffect } from 'react';
+import { useAccount } from 'wagmi';
+import { CONTRACT_ADDRESS, CONTRACT_ABI, CARD_NAMES, BATTLE_RESULT } from '../config/contracts';
+import { useEthersSigner } from '../hooks/useEthersSigner';
+import { useZamaInstance } from '../hooks/useZamaInstance';
+import { GameInfo, Card } from './EncryptedCardGame';
+
+interface GameBoardProps {
+  gameInfo: GameInfo;
+  playerIndex: number;
+  onGameUpdate: () => void;
+}
+
+interface DecryptedCard extends Card {
+  index: number;
+}
+
+export function GameBoard({ gameInfo, playerIndex, onGameUpdate }: GameBoardProps) {
+  const { address } = useAccount();
+  const signer = useEthersSigner();
+  const { instance } = useZamaInstance();
+  const [playerCards, setPlayerCards] = useState<DecryptedCard[]>([]);
+  const [selectedCard, setSelectedCard] = useState<number | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [cardsLoading, setCardsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [battleResults, setBattleResults] = useState<{ [round: number]: number }>({});
+
+  // Fetch player cards
+  const fetchPlayerCards = async () => {
+    if (!instance || !address || !signer) return;
+
+    try {
+      setCardsLoading(true);
+
+      // Get contract instance with signer
+      const { ethers } = await import('ethers');
+      const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
+
+      // Get encrypted card data
+      const [types, healths, aliveStatus] = await contract.getPlayerCards(playerIndex);
+
+      // Decrypt the cards
+      const cards: DecryptedCard[] = [];
+      for (let i = 0; i < 6; i++) {
+        try {
+          // Use Zama SDK for user decryption on Sepolia
+          const handleContractPairs = [
+            { handle: types[i], contractAddress: CONTRACT_ADDRESS },
+            { handle: healths[i], contractAddress: CONTRACT_ADDRESS },
+            { handle: aliveStatus[i], contractAddress: CONTRACT_ADDRESS }
+          ];
+
+          const keypair = instance.generateKeypair();
+          const startTimeStamp = Math.floor(Date.now() / 1000).toString();
+          const durationDays = "10";
+          const contractAddresses = [CONTRACT_ADDRESS];
+
+          const eip712 = instance.createEIP712(keypair.publicKey, contractAddresses, startTimeStamp, durationDays);
+
+          const signature = await signer.signTypedData(
+            eip712.domain,
+            {
+              UserDecryptRequestVerification: eip712.types.UserDecryptRequestVerification,
+            },
+            eip712.message,
+          );
+
+          const result = await instance.userDecrypt(
+            handleContractPairs,
+            keypair.privateKey,
+            keypair.publicKey,
+            signature.replace("0x", ""),
+            contractAddresses,
+            address,
+            startTimeStamp,
+            durationDays,
+          );
+
+          const cardType = result[types[i]];
+          const cardHealth = result[healths[i]];
+          const isAlive = result[aliveStatus[i]];
+
+          cards.push({
+            index: i,
+            type: Number(cardType),
+            health: Number(cardHealth),
+            isAlive: Boolean(isAlive)
+          });
+        } catch (err) {
+          console.error(`Failed to decrypt card ${i}:`, err);
+          // Add a placeholder card if decryption fails
+          cards.push({
+            index: i,
+            type: 0,
+            health: 1,
+            isAlive: false
+          });
+        }
+      }
+
+      setPlayerCards(cards);
+      setError(null);
+    } catch (err: any) {
+      console.error('Failed to fetch player cards:', err);
+      setError('Failed to load your cards');
+    } finally {
+      setCardsLoading(false);
+    }
+  };
+
+  // Fetch battle results
+  const fetchBattleResults = async () => {
+    if (!instance || !address || !signer || gameInfo.round === 0) return;
+
+    try {
+      const { ethers } = await import('ethers');
+      const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
+
+      const results: { [round: number]: number } = {};
+
+      for (let round = 0; round < gameInfo.round; round++) {
+        try {
+          const encryptedResult = await contract.getBattleResult(round);
+          // Use Zama SDK for battle result decryption
+          const handleContractPairs = [
+            { handle: encryptedResult, contractAddress: CONTRACT_ADDRESS }
+          ];
+
+          const keypair = instance.generateKeypair();
+          const startTimeStamp = Math.floor(Date.now() / 1000).toString();
+          const durationDays = "10";
+          const contractAddresses = [CONTRACT_ADDRESS];
+
+          const eip712 = instance.createEIP712(keypair.publicKey, contractAddresses, startTimeStamp, durationDays);
+
+          const signature = await signer.signTypedData(
+            eip712.domain,
+            {
+              UserDecryptRequestVerification: eip712.types.UserDecryptRequestVerification,
+            },
+            eip712.message,
+          );
+
+          const decryptResult = await instance.userDecrypt(
+            handleContractPairs,
+            keypair.privateKey,
+            keypair.publicKey,
+            signature.replace("0x", ""),
+            contractAddresses,
+            address,
+            startTimeStamp,
+            durationDays,
+          );
+
+          const result = decryptResult[encryptedResult];
+          results[round] = Number(result);
+        } catch (err) {
+          console.error(`Failed to decrypt battle result for round ${round}:`, err);
+        }
+      }
+
+      setBattleResults(results);
+    } catch (err) {
+      console.error('Failed to fetch battle results:', err);
+    }
+  };
+
+  // Play a card
+  const playCard = async (cardIndex: number) => {
+    if (!signer || !instance || !address) {
+      setError('Wallet not connected or FHEVM instance not ready');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      setError(null);
+
+      console.log(`Playing card at index ${cardIndex}...`);
+
+      // Create encrypted input for card index
+      const input = instance.createEncryptedInput(CONTRACT_ADDRESS, address);
+      input.add8(cardIndex);
+      const encryptedInput = await input.encrypt();
+
+      // Get contract instance with signer
+      const { ethers } = await import('ethers');
+      const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
+
+      // Play the card
+      const tx = await contract.playCard(
+        encryptedInput.handles[0],
+        encryptedInput.inputProof
+      );
+
+      console.log('Transaction sent, waiting for confirmation...');
+      await tx.wait();
+
+      console.log('Card played successfully!');
+      setSelectedCard(null);
+      onGameUpdate();
+
+      // Refresh cards and battle results after a short delay
+      setTimeout(() => {
+        fetchPlayerCards();
+        fetchBattleResults();
+      }, 2000);
+    } catch (err: any) {
+      console.error('Failed to play card:', err);
+      setError(err.message || 'Failed to play card');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Load cards when component mounts or player changes
+  useEffect(() => {
+    fetchPlayerCards();
+    fetchBattleResults();
+  }, [playerIndex, instance, address, signer]);
+
+  const getCardEmoji = (cardType: number) => {
+    switch (cardType) {
+      case 0: return '🦅';
+      case 1: return '🐻';
+      case 2: return '🐍';
+      default: return '❓';
+    }
+  };
+
+  const getBattleResultText = (result: number) => {
+    switch (result) {
+      case BATTLE_RESULT.DRAW: return 'Draw';
+      case BATTLE_RESULT.PLAYER1_WINS: return 'Player 1 Wins';
+      case BATTLE_RESULT.PLAYER2_WINS: return 'Player 2 Wins';
+      default: return 'Unknown';
+    }
+  };
+
+  const aliveCards = playerCards.filter(card => card.isAlive);
+
+  return (
+    <div>
+      {/* Player Cards */}
+      <div style={{
+        backgroundColor: 'white',
+        padding: '2rem',
+        borderRadius: '12px',
+        boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+        marginBottom: '2rem'
+      }}>
+        <h2 style={{ fontSize: '1.5rem', fontWeight: 'bold', marginBottom: '1.5rem', color: '#374151' }}>
+          Your Cards (Player {playerIndex + 1})
+        </h2>
+
+        {cardsLoading ? (
+          <p style={{ color: '#6b7280' }}>Loading your cards...</p>
+        ) : (
+          <>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '1rem', marginBottom: '2rem' }}>
+              {playerCards.map((card) => (
+                <div
+                  key={card.index}
+                  onClick={() => card.isAlive && setSelectedCard(card.index)}
+                  style={{
+                    border: selectedCard === card.index ? '3px solid #3b82f6' : card.isAlive ? '2px solid #10b981' : '2px solid #ef4444',
+                    borderRadius: '8px',
+                    padding: '1rem',
+                    backgroundColor: card.isAlive ? '#f0fdf4' : '#fef2f2',
+                    cursor: card.isAlive ? 'pointer' : 'not-allowed',
+                    opacity: card.isAlive ? 1 : 0.6,
+                    transition: 'all 0.2s'
+                  }}
+                >
+                  <div style={{ textAlign: 'center' }}>
+                    <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>
+                      {getCardEmoji(card.type)}
+                    </div>
+                    <div style={{ fontSize: '1rem', fontWeight: 'bold', marginBottom: '0.5rem', color: '#374151' }}>
+                      {CARD_NAMES[card.type as keyof typeof CARD_NAMES]}
+                    </div>
+                    <div style={{ fontSize: '0.875rem', color: '#6b7280' }}>
+                      {card.health} HP
+                    </div>
+                    <div style={{ fontSize: '0.75rem', fontWeight: 'bold', marginTop: '0.5rem', color: card.isAlive ? '#10b981' : '#ef4444' }}>
+                      {card.isAlive ? 'ALIVE' : 'DEAD'}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div style={{ textAlign: 'center', marginBottom: '1rem' }}>
+              <p style={{ fontSize: '1.125rem', color: '#374151' }}>
+                <strong>Alive Cards: {aliveCards.length}/6</strong>
+              </p>
+              {selectedCard !== null && (
+                <p style={{ fontSize: '0.875rem', color: '#6b7280', marginTop: '0.5rem' }}>
+                  Selected: Card {selectedCard + 1} - Click "Play Selected Card" to use it in battle
+                </p>
+              )}
+            </div>
+
+            {error && (
+              <div style={{
+                backgroundColor: '#fef2f2',
+                border: '1px solid #fecaca',
+                borderRadius: '6px',
+                padding: '1rem',
+                marginBottom: '1rem'
+              }}>
+                <p style={{ color: '#dc2626', fontSize: '0.875rem' }}>
+                  {error}
+                </p>
+              </div>
+            )}
+
+            {selectedCard !== null && (
+              <div style={{ textAlign: 'center' }}>
+                <button
+                  onClick={() => playCard(selectedCard)}
+                  disabled={loading}
+                  style={{
+                    backgroundColor: loading ? '#9ca3af' : '#10b981',
+                    color: 'white',
+                    padding: '0.75rem 2rem',
+                    borderRadius: '6px',
+                    border: 'none',
+                    fontSize: '1rem',
+                    fontWeight: 'medium',
+                    cursor: loading ? 'not-allowed' : 'pointer',
+                    marginRight: '1rem'
+                  }}
+                >
+                  {loading ? 'Playing Card...' : 'Play Selected Card'}
+                </button>
+                <button
+                  onClick={() => setSelectedCard(null)}
+                  disabled={loading}
+                  style={{
+                    backgroundColor: '#6b7280',
+                    color: 'white',
+                    padding: '0.75rem 1.5rem',
+                    borderRadius: '6px',
+                    border: 'none',
+                    fontSize: '1rem',
+                    fontWeight: 'medium',
+                    cursor: loading ? 'not-allowed' : 'pointer'
+                  }}
+                >
+                  Cancel
+                </button>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+
+      {/* Battle Results */}
+      {Object.keys(battleResults).length > 0 && (
+        <div style={{
+          backgroundColor: 'white',
+          padding: '2rem',
+          borderRadius: '12px',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
+        }}>
+          <h2 style={{ fontSize: '1.5rem', fontWeight: 'bold', marginBottom: '1.5rem', color: '#374151' }}>
+            Battle Results
+          </h2>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '1rem' }}>
+            {Object.entries(battleResults).map(([round, result]) => (
+              <div
+                key={round}
+                style={{
+                  border: '2px solid #e5e7eb',
+                  borderRadius: '8px',
+                  padding: '1rem',
+                  backgroundColor: '#f9fafb',
+                  textAlign: 'center'
+                }}
+              >
+                <div style={{ fontSize: '1rem', fontWeight: 'bold', marginBottom: '0.5rem', color: '#374151' }}>
+                  Round {parseInt(round) + 1}
+                </div>
+                <div style={{
+                  fontSize: '0.875rem',
+                  color: result === BATTLE_RESULT.PLAYER1_WINS && playerIndex === 0 ? '#10b981' :
+                         result === BATTLE_RESULT.PLAYER2_WINS && playerIndex === 1 ? '#10b981' :
+                         result === BATTLE_RESULT.DRAW ? '#f59e0b' : '#ef4444'
+                }}>
+                  {getBattleResultText(result)}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
