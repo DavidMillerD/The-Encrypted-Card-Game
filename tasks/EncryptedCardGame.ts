@@ -149,9 +149,12 @@ task("game:info", "Get game information")
 task("game:mycards", "View your cards (requires decryption)")
   .addParam("contract", "The contract address")
   .addParam("playerindex", "Your player index (0 or 1)")
+  .addOptionalParam("account", "Account index to use (0, 1, 2, etc.)", "0")
   .setAction(async function (taskArguments: TaskArguments, { ethers, fhevm }) {
-    const { contract: contractAddress, playerindex } = taskArguments;
-    const [signer] = await ethers.getSigners();
+    const { contract: contractAddress, playerindex, account } = taskArguments;
+    const signers = await ethers.getSigners();
+    const accountIndex = parseInt(account);
+    const signer = signers[accountIndex];
 
     await fhevm.initializeCLIApi();
 
