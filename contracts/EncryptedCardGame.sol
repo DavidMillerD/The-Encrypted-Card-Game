@@ -118,9 +118,13 @@ contract EncryptedCardGame is SepoliaConfig {
         
         // Validate card index (0-5)
         ebool validIndex = FHE.le(cardIndex, 5);
-        
-        // Check if card is alive
-        euint8 safeIndex = FHE.select(validIndex, cardIndex, FHE.asEuint8(0));
+
+        // Check if the selected card is alive
+        ebool cardIsAlive = getCardAliveByIndex(playerIndex, cardIndex);
+        ebool canPlayCard = FHE.and(validIndex, cardIsAlive);
+
+        // If card is not playable, default to first card (for safety)
+        euint8 safeIndex = FHE.select(canPlayCard, cardIndex, FHE.asEuint8(0));
         
         // Store the played card index
         currentPlayedCards[playerIndex] = safeIndex;
@@ -264,7 +268,11 @@ contract EncryptedCardGame is SepoliaConfig {
                 FHE.asEbool(false),
                 players[0].cards[i].isAlive
             );
-            
+
+            // Set ACL permissions for updated player 1 cards
+            FHE.allowThis(players[0].cards[i].isAlive);
+            FHE.allow(players[0].cards[i].isAlive, players[0].playerAddress);
+
             // Update player 2's cards
             ebool isPlayer2Card = FHE.eq(card2Index, i);
             ebool killPlayer2Card = FHE.and(isPlayer2Card, FHE.or(player1Wins, isDraw));
@@ -273,6 +281,10 @@ contract EncryptedCardGame is SepoliaConfig {
                 FHE.asEbool(false),
                 players[1].cards[i].isAlive
             );
+
+            // Set ACL permissions for updated player 2 cards
+            FHE.allowThis(players[1].cards[i].isAlive);
+            FHE.allow(players[1].cards[i].isAlive, players[1].playerAddress);
         }
         
         // Update alive counts
