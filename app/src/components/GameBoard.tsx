@@ -1,9 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useAccount } from 'wagmi';
 import { CONTRACT_ADDRESS, CONTRACT_ABI, CARD_NAMES, BATTLE_RESULT } from '../config/contracts';
 import { useEthersSigner } from '../hooks/useEthersSigner';
 import { useZamaInstance } from '../hooks/useZamaInstance';
-import type{ GameInfo, Card } from './EncryptedCardGame';
+import type { GameInfo, Card } from './EncryptedCardGame';
 
 interface GameBoardProps {
   gameInfo: GameInfo;
@@ -28,14 +28,17 @@ export function GameBoard({ gameInfo, playerIndex, onGameUpdate }: GameBoardProp
 
   // Fetch player cards
   const fetchPlayerCards = async () => {
-    if (!instance || !address || !signer) return;
+    if (!instance || !address) return;
 
     try {
       setCardsLoading(true);
 
-      // Get contract instance with signer
+      // Get signer and contract instance
       const { ethers } = await import('ethers');
-      const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
+      const resolvedSigner = await signer;
+      if (!resolvedSigner) return;
+
+      const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, resolvedSigner);
 
       // Get encrypted card data
       const [types, healths, aliveStatus] = await contract.getPlayerCards(playerIndex);
@@ -58,7 +61,7 @@ export function GameBoard({ gameInfo, playerIndex, onGameUpdate }: GameBoardProp
 
           const eip712 = instance.createEIP712(keypair.publicKey, contractAddresses, startTimeStamp, durationDays);
 
-          const signature = await signer.signTypedData(
+          const signature = await resolvedSigner.signTypedData(
             eip712.domain,
             {
               UserDecryptRequestVerification: eip712.types.UserDecryptRequestVerification,
@@ -111,11 +114,14 @@ export function GameBoard({ gameInfo, playerIndex, onGameUpdate }: GameBoardProp
 
   // Fetch battle results
   const fetchBattleResults = async () => {
-    if (!instance || !address || !signer || gameInfo.round === 0) return;
+    if (!instance || !address || gameInfo.round === 0) return;
 
     try {
       const { ethers } = await import('ethers');
-      const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
+      const resolvedSigner = await signer;
+      if (!resolvedSigner) return;
+
+      const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, resolvedSigner);
 
       const results: { [round: number]: number } = {};
 
@@ -134,7 +140,7 @@ export function GameBoard({ gameInfo, playerIndex, onGameUpdate }: GameBoardProp
 
           const eip712 = instance.createEIP712(keypair.publicKey, contractAddresses, startTimeStamp, durationDays);
 
-          const signature = await signer.signTypedData(
+          const signature = await resolvedSigner.signTypedData(
             eip712.domain,
             {
               UserDecryptRequestVerification: eip712.types.UserDecryptRequestVerification,
@@ -168,7 +174,7 @@ export function GameBoard({ gameInfo, playerIndex, onGameUpdate }: GameBoardProp
 
   // Play a card
   const playCard = async (cardIndex: number) => {
-    if (!signer || !instance || !address) {
+    if (!instance || !address) {
       setError('Wallet not connected or FHEVM instance not ready');
       return;
     }
@@ -186,7 +192,13 @@ export function GameBoard({ gameInfo, playerIndex, onGameUpdate }: GameBoardProp
 
       // Get contract instance with signer
       const { ethers } = await import('ethers');
-      const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
+      const resolvedSigner = await signer;
+      if (!resolvedSigner) {
+        setError('Signer not available');
+        return;
+      }
+
+      const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, resolvedSigner);
 
       // Play the card
       const tx = await contract.playCard(
@@ -218,7 +230,7 @@ export function GameBoard({ gameInfo, playerIndex, onGameUpdate }: GameBoardProp
   useEffect(() => {
     fetchPlayerCards();
     fetchBattleResults();
-  }, [playerIndex, instance, address, signer]);
+  }, [playerIndex, instance, address]);
 
   const getCardEmoji = (cardType: number) => {
     switch (cardType) {

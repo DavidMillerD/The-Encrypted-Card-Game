@@ -1,5 +1,5 @@
 // EncryptedCardGame contract deployed on Sepolia
-export const CONTRACT_ADDRESS = '0x1234567890123456789012345678901234567890';
+export const CONTRACT_ADDRESS = '0xBce452Dcda757C451459a19a103364BC3728FE59';
 
 // Generated ABI from contract artifacts - Auto-synced from EncryptedCardGame.json
 export const CONTRACT_ABI = [

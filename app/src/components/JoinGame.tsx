@@ -37,7 +37,7 @@ export function JoinGame({ onJoinSuccess }: JoinGameProps) {
   };
 
   const joinGame = async () => {
-    if (!signer || !instance || !address) {
+    if (!instance || !address) {
       setError('Wallet not connected or FHEVM instance not ready');
       return;
     }
@@ -75,7 +75,13 @@ export function JoinGame({ onJoinSuccess }: JoinGameProps) {
       const { ethers } = await import('ethers');
       const { CONTRACT_ABI } = await import('../config/contracts');
 
-      const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
+      const resolvedSigner = await signer;
+      if (!resolvedSigner) {
+        setError('Signer not available');
+        return;
+      }
+
+      const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, resolvedSigner);
 
       // Join the game
       const tx = await contract.joinGame(
