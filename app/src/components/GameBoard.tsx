@@ -3,7 +3,7 @@ import { useAccount } from 'wagmi';
 import { CONTRACT_ADDRESS, CONTRACT_ABI, CARD_NAMES, BATTLE_RESULT } from '../config/contracts';
 import { useEthersSigner } from '../hooks/useEthersSigner';
 import { useZamaInstance } from '../hooks/useZamaInstance';
-import { GameInfo, Card } from './EncryptedCardGame';
+import type{ GameInfo, Card } from './EncryptedCardGame';
 
 interface GameBoardProps {
   gameInfo: GameInfo;
