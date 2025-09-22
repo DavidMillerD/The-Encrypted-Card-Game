@@ -1,6 +1,7 @@
 import { task } from "hardhat/config";
 import type { TaskArguments } from "hardhat/types";
 import { fhevm } from "hardhat";
+import { FhevmType } from "@fhevm/hardhat-plugin";
 
 task("game:deploy", "Deploy the EncryptedCardGame contract")
   .setAction(async function (taskArguments: TaskArguments, { ethers, fhevm }) {
@@ -20,9 +21,14 @@ task("game:join", "Join a game with encrypted cards")
   .addParam("contract", "The contract address")
   .addParam("cards", "Card types comma separated (0=Eagle, 1=Bear, 2=Snake)")
   .addParam("health", "Card health values comma separated")
+  .addOptionalParam("account", "Account index to use (0, 1, 2, etc.)", "0")
   .setAction(async function (taskArguments: TaskArguments, { ethers, fhevm }) {
-    const { contract: contractAddress, cards, health } = taskArguments;
-    const [signer] = await ethers.getSigners();
+    const { contract: contractAddress, cards, health, account } = taskArguments;
+    const signers = await ethers.getSigners();
+    const accountIndex = parseInt(account);
+    const signer = signers[accountIndex];
+
+    await fhevm.initializeCLIApi();
 
     const contract = await ethers.getContractAt("EncryptedCardGame", contractAddress);
 
@@ -86,9 +92,14 @@ task("game:join", "Join a game with encrypted cards")
 task("game:play", "Play a card")
   .addParam("contract", "The contract address")
   .addParam("cardindex", "Index of the card to play (0-5)")
+  .addOptionalParam("account", "Account index to use (0, 1, 2, etc.)", "0")
   .setAction(async function (taskArguments: TaskArguments, { ethers, fhevm }) {
-    const { contract: contractAddress, cardindex } = taskArguments;
-    const [signer] = await ethers.getSigners();
+    const { contract: contractAddress, cardindex, account } = taskArguments;
+    const signers = await ethers.getSigners();
+    const accountIndex = parseInt(account);
+    const signer = signers[accountIndex];
+
+    await fhevm.initializeCLIApi();
 
     const cardIndex = parseInt(cardindex);
     if (cardIndex < 0 || cardIndex > 5) {
@@ -142,6 +153,8 @@ task("game:mycards", "View your cards (requires decryption)")
     const { contract: contractAddress, playerindex } = taskArguments;
     const [signer] = await ethers.getSigners();
 
+    await fhevm.initializeCLIApi();
+
     const playerIndex = parseInt(playerindex);
     if (![0, 1].includes(playerIndex)) {
       throw new Error("Player index must be 0 or 1");
@@ -156,8 +169,8 @@ task("game:mycards", "View your cards (requires decryption)")
     
     console.log("=== Your Cards ===");
     for (let i = 0; i < 6; i++) {
-      const cardType = await fhevm.userDecryptEuint("euint8", types[i], contractAddress, signer);
-      const cardHealth = await fhevm.userDecryptEuint("euint8", healths[i], contractAddress, signer);
+      const cardType = await fhevm.userDecryptEuint(FhevmType.euint8, types[i], contractAddress, signer);
+      const cardHealth = await fhevm.userDecryptEuint(FhevmType.euint8, healths[i], contractAddress, signer);
       const isAlive = await fhevm.userDecryptEbool(aliveStatus[i], contractAddress, signer);
       
       const cardName = getCardName(Number(cardType));
@@ -168,7 +181,7 @@ task("game:mycards", "View your cards (requires decryption)")
 
     // Get alive count
     const aliveCount = await contract.connect(signer).getAliveCount(playerIndex);
-    const decryptedAliveCount = await fhevm.userDecryptEuint("euint8", aliveCount, contractAddress, signer);
+    const decryptedAliveCount = await fhevm.userDecryptEuint(FhevmType.euint8, aliveCount, contractAddress, signer);
     console.log(`\nAlive cards: ${decryptedAliveCount}`);
   });
 
@@ -179,13 +192,15 @@ task("game:battle", "Get battle result for a round")
     const { contract: contractAddress, round } = taskArguments;
     const [signer] = await ethers.getSigners();
 
+    await fhevm.initializeCLIApi();
+
     const roundNumber = parseInt(round);
     const contract = await ethers.getContractAt("EncryptedCardGame", contractAddress);
 
     console.log(`Getting battle result for round ${roundNumber}...`);
     
     const encryptedResult = await contract.getBattleResult(roundNumber);
-    const result = await fhevm.userDecryptEuint("euint8", encryptedResult, contractAddress, signer);
+    const result = await fhevm.userDecryptEuint(FhevmType.euint8, encryptedResult, contractAddress, signer);
     
     console.log("=== Battle Result ===");
     console.log("Round:", roundNumber);
