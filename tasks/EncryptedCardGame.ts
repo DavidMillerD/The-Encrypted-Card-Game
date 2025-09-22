@@ -1,240 +1,304 @@
+import { FhevmType } from "@fhevm/hardhat-plugin";
 import { task } from "hardhat/config";
 import type { TaskArguments } from "hardhat/types";
-import { fhevm } from "hardhat";
-import { FhevmType } from "@fhevm/hardhat-plugin";
 
-task("game:deploy", "Deploy the EncryptedCardGame contract")
-  .setAction(async function (taskArguments: TaskArguments, { ethers, fhevm }) {
+/**
+ * Tutorial: Deploy and Interact with Encrypted Card Game Locally (--network localhost)
+ * =================================================================================
+ *
+ * 1. From a separate terminal window:
+ *
+ *   npx hardhat node
+ *
+ * 2. Deploy the EncryptedCardGameV2 contract
+ *
+ *   npx hardhat --network localhost deploy
+ *
+ * 3. Interact with the Encrypted Card Game contract
+ *
+ *   npx hardhat --network localhost game:create
+ *   npx hardhat --network localhost game:join --gameid 0 --cards "2,1,0,2,1,0"
+ *   npx hardhat --network localhost game:info --gameid 0
+ *   npx hardhat --network localhost game:play --gameid 0 --card 0
+ *   npx hardhat --network localhost game:cards --gameid 0 --player 0
+ *
+ *
+ * Tutorial: Deploy and Interact on Sepolia (--network sepolia)
+ * ===========================================================
+ *
+ * 1. Deploy the EncryptedCardGameV2 contract
+ *
+ *   npx hardhat --network sepolia deploy
+ *
+ * 2. Interact with the Encrypted Card Game contract
+ *
+ *   npx hardhat --network sepolia game:create
+ *   npx hardhat --network sepolia game:join --gameid 0 --cards "2,1,0,2,1,0"
+ *   npx hardhat --network sepolia game:info --gameid 0
+ *   npx hardhat --network sepolia game:play --gameid 0 --card 0
+ *   npx hardhat --network sepolia game:cards --gameid 0 --player 0
+ *
+ */
+
+/**
+ * Example:
+ *   - npx hardhat --network localhost game:address
+ *   - npx hardhat --network sepolia game:address
+ */
+task("game:address", "Prints the EncryptedCardGameV2 address").setAction(async function (_taskArguments: TaskArguments, hre) {
+  const { deployments } = hre;
+
+  const cardGame = await deployments.get("EncryptedCardGameV2");
+
+  console.log("EncryptedCardGameV2 address is " + cardGame.address);
+});
+
+/**
+ * Example:
+ *   - npx hardhat --network localhost game:create
+ *   - npx hardhat --network sepolia game:create
+ */
+task("game:create", "Creates a new game")
+  .addOptionalParam("address", "Optionally specify the EncryptedCardGameV2 contract address")
+  .setAction(async function (taskArguments: TaskArguments, hre) {
+    const { ethers, deployments } = hre;
+
+    const CardGameDeployment = taskArguments.address
+      ? { address: taskArguments.address }
+      : await deployments.get("EncryptedCardGameV2");
+    console.log(`EncryptedCardGameV2: ${CardGameDeployment.address}`);
+
     const signers = await ethers.getSigners();
-    const deployer = signers[0];
+    const cardGameContract = await ethers.getContractAt("EncryptedCardGameV2", CardGameDeployment.address);
 
-    console.log("Deploying EncryptedCardGame with account:", deployer.address);
+    const tx = await cardGameContract.connect(signers[0]).createGame();
+    console.log(`Wait for tx:${tx.hash}...`);
 
-    const factory = await ethers.getContractFactory("EncryptedCardGame");
-    const contract = await factory.connect(deployer).deploy();
-    await contract.waitForDeployment();
+    const receipt = await tx.wait();
+    console.log(`tx:${tx.hash} status=${receipt?.status}`);
 
-    console.log("EncryptedCardGame deployed to:", await contract.getAddress());
-  });
+    // Parse the GameCreated event to get the gameId
+    const gameCreatedEvent = receipt?.logs.find((log: any) => {
+      try {
+        const parsed = cardGameContract.interface.parseLog(log);
+        return parsed?.name === "GameCreated";
+      } catch {
+        return false;
+      }
+    });
 
-task("game:join", "Join a game with encrypted cards")
-  .addParam("contract", "The contract address")
-  .addParam("cards", "Card types comma separated (0=Eagle, 1=Bear, 2=Snake)")
-  .addParam("health", "Card health values comma separated")
-  .addOptionalParam("account", "Account index to use (0, 1, 2, etc.)", "0")
-  .setAction(async function (taskArguments: TaskArguments, { ethers, fhevm }) {
-    const { contract: contractAddress, cards, health, account } = taskArguments;
-    const signers = await ethers.getSigners();
-    const accountIndex = parseInt(account);
-    const signer = signers[accountIndex];
-
-    await fhevm.initializeCLIApi();
-
-    const contract = await ethers.getContractAt("EncryptedCardGame", contractAddress);
-
-    // Parse input
-    const cardTypes = cards.split(",").map((x: string) => parseInt(x.trim()));
-    const cardHealths = health.split(",").map((x: string) => parseInt(x.trim()));
-
-    if (cardTypes.length !== 6 || cardHealths.length !== 6) {
-      throw new Error("Must provide exactly 6 cards and 6 health values");
+    if (gameCreatedEvent) {
+      const parsed = cardGameContract.interface.parseLog(gameCreatedEvent);
+      const gameId = parsed?.args.gameId;
+      console.log(`Game created with ID: ${gameId}`);
     }
 
-    // Validate card types (0, 1, 2)
+    console.log("Game creation succeeded!");
+  });
+
+/**
+ * Example:
+ *   - npx hardhat --network localhost game:join --gameid 0 --cards "2,1,0,2,1,0"
+ *   - npx hardhat --network sepolia game:join --gameid 0 --cards "2,1,0,2,1,0"
+ */
+task("game:join", "Joins a game with encrypted cards")
+  .addOptionalParam("address", "Optionally specify the EncryptedCardGameV2 contract address")
+  .addParam("gameid", "The game ID to join")
+  .addParam("cards", "Comma-separated list of 6 card types (0=Eagle, 1=Bear, 2=Snake)")
+  .setAction(async function (taskArguments: TaskArguments, hre) {
+    const { ethers, deployments, fhevm } = hre;
+
+    const gameId = parseInt(taskArguments.gameid);
+    if (!Number.isInteger(gameId) || gameId < 0) {
+      throw new Error(`Argument --gameid is not a valid non-negative integer`);
+    }
+
+    const cardTypesStr = taskArguments.cards;
+    const cardTypes = cardTypesStr.split(",").map((x: string) => parseInt(x.trim()));
+
+    if (cardTypes.length !== 6) {
+      throw new Error("Must provide exactly 6 card types");
+    }
+
     for (const cardType of cardTypes) {
-      if (![0, 1, 2].includes(cardType)) {
+      if (!Number.isInteger(cardType) || cardType < 0 || cardType > 2) {
         throw new Error("Card types must be 0 (Eagle), 1 (Bear), or 2 (Snake)");
       }
     }
 
-    // Validate health (1-10)
-    for (const hp of cardHealths) {
-      if (hp < 1 || hp > 10) {
-        throw new Error("Card health must be between 1 and 10");
-      }
-    }
+    await fhevm.initializeCLIApi();
 
-    console.log("Creating encrypted inputs...");
+    const CardGameDeployment = taskArguments.address
+      ? { address: taskArguments.address }
+      : await deployments.get("EncryptedCardGameV2");
+    console.log(`EncryptedCardGameV2: ${CardGameDeployment.address}`);
 
-    // Create encrypted input
-    const input = fhevm.createEncryptedInput(contractAddress, signer.address);
-    
-    // Add card types
+    const signers = await ethers.getSigners();
+    const cardGameContract = await ethers.getContractAt("EncryptedCardGameV2", CardGameDeployment.address);
+
+    console.log(`Joining game ${gameId} with card types: ${cardTypes.join(", ")}`);
+
+    // Encrypt the card types
+    const encryptedInput = fhevm.createEncryptedInput(CardGameDeployment.address, signers[0].address);
     for (const cardType of cardTypes) {
-      input.add8(cardType);
+      encryptedInput.add8(cardType);
     }
-    
-    // Add card healths
-    for (const cardHealth of cardHealths) {
-      input.add8(cardHealth);
-    }
+    const encryptedCards = await encryptedInput.encrypt();
 
-    const encryptedInput = await input.encrypt();
+    const tx = await cardGameContract
+      .connect(signers[0])
+      .joinGame(gameId, encryptedCards.handles, encryptedCards.inputProof);
+    console.log(`Wait for tx:${tx.hash}...`);
 
-    console.log("Joining game...");
+    const receipt = await tx.wait();
+    console.log(`tx:${tx.hash} status=${receipt?.status}`);
 
-    const tx = await contract.connect(signer).joinGame(
-      encryptedInput.handles.slice(0, 6), // Card types
-      encryptedInput.handles.slice(6, 12), // Card healths
-      encryptedInput.inputProof
-    );
-
-    await tx.wait();
-    console.log("Successfully joined game!");
-
-    // Check game info
-    const gameInfo = await contract.getGameInfo();
-    console.log("Game state:", gameInfo.state.toString());
-    console.log("Players joined:", gameInfo.joined.toString());
-    console.log("Current round:", gameInfo.round.toString());
+    console.log(`Successfully joined game ${gameId}!`);
   });
 
-task("game:play", "Play a card")
-  .addParam("contract", "The contract address")
-  .addParam("cardindex", "Index of the card to play (0-5)")
-  .addOptionalParam("account", "Account index to use (0, 1, 2, etc.)", "0")
-  .setAction(async function (taskArguments: TaskArguments, { ethers, fhevm }) {
-    const { contract: contractAddress, cardindex, account } = taskArguments;
+/**
+ * Example:
+ *   - npx hardhat --network localhost game:play --gameid 0 --card 0
+ *   - npx hardhat --network sepolia game:play --gameid 0 --card 0
+ */
+task("game:play", "Plays a card in the current round")
+  .addOptionalParam("address", "Optionally specify the EncryptedCardGameV2 contract address")
+  .addParam("gameid", "The game ID")
+  .addParam("card", "The card index to play (0-5)")
+  .setAction(async function (taskArguments: TaskArguments, hre) {
+    const { ethers, deployments } = hre;
+
+    const gameId = parseInt(taskArguments.gameid);
+    if (!Number.isInteger(gameId) || gameId < 0) {
+      throw new Error(`Argument --gameid is not a valid non-negative integer`);
+    }
+
+    const cardIndex = parseInt(taskArguments.card);
+    if (!Number.isInteger(cardIndex) || cardIndex < 0 || cardIndex > 5) {
+      throw new Error(`Argument --card must be between 0 and 5`);
+    }
+
+    const CardGameDeployment = taskArguments.address
+      ? { address: taskArguments.address }
+      : await deployments.get("EncryptedCardGameV2");
+    console.log(`EncryptedCardGameV2: ${CardGameDeployment.address}`);
+
     const signers = await ethers.getSigners();
-    const accountIndex = parseInt(account);
-    const signer = signers[accountIndex];
+    const cardGameContract = await ethers.getContractAt("EncryptedCardGameV2", CardGameDeployment.address);
 
-    await fhevm.initializeCLIApi();
+    console.log(`Playing card ${cardIndex} in game ${gameId}`);
 
-    const cardIndex = parseInt(cardindex);
-    if (cardIndex < 0 || cardIndex > 5) {
-      throw new Error("Card index must be between 0 and 5");
+    const tx = await cardGameContract.connect(signers[0]).playCard(gameId, cardIndex);
+    console.log(`Wait for tx:${tx.hash}...`);
+
+    const receipt = await tx.wait();
+    console.log(`tx:${tx.hash} status=${receipt?.status}`);
+
+    console.log(`Successfully played card ${cardIndex} in game ${gameId}!`);
+  });
+
+/**
+ * Example:
+ *   - npx hardhat --network localhost game:info --gameid 0
+ *   - npx hardhat --network sepolia game:info --gameid 0
+ */
+task("game:info", "Gets information about a game")
+  .addOptionalParam("address", "Optionally specify the EncryptedCardGameV2 contract address")
+  .addParam("gameid", "The game ID")
+  .setAction(async function (taskArguments: TaskArguments, hre) {
+    const { ethers, deployments } = hre;
+
+    const gameId = parseInt(taskArguments.gameid);
+    if (!Number.isInteger(gameId) || gameId < 0) {
+      throw new Error(`Argument --gameid is not a valid non-negative integer`);
     }
 
-    const contract = await ethers.getContractAt("EncryptedCardGame", contractAddress);
+    const CardGameDeployment = taskArguments.address
+      ? { address: taskArguments.address }
+      : await deployments.get("EncryptedCardGameV2");
+    console.log(`EncryptedCardGameV2: ${CardGameDeployment.address}`);
 
-    console.log("Creating encrypted card index...");
-
-    const input = fhevm.createEncryptedInput(contractAddress, signer.address);
-    input.add8(cardIndex);
-    const encryptedInput = await input.encrypt();
-
-    console.log(`Playing card at index ${cardIndex}...`);
-
-    const tx = await contract.connect(signer).playCard(
-      encryptedInput.handles[0],
-      encryptedInput.inputProof
-    );
-
-    await tx.wait();
-    console.log("Card played successfully!");
-
-    // Check game info
-    const gameInfo = await contract.getGameInfo();
-    console.log("Current round:", gameInfo.round.toString());
-  });
-
-task("game:info", "Get game information")
-  .addParam("contract", "The contract address")
-  .setAction(async function (taskArguments: TaskArguments, { ethers }) {
-    const { contract: contractAddress } = taskArguments;
-
-    const contract = await ethers.getContractAt("EncryptedCardGame", contractAddress);
-
-    const gameInfo = await contract.getGameInfo();
-    
-    console.log("=== Game Information ===");
-    console.log("Game state:", gameInfo.state.toString(), getGameStateName(gameInfo.state));
-    console.log("Players joined:", gameInfo.joined.toString());
-    console.log("Current round:", gameInfo.round.toString());
-    console.log("Player 1:", gameInfo.player1);
-    console.log("Player 2:", gameInfo.player2);
-  });
-
-task("game:mycards", "View your cards (requires decryption)")
-  .addParam("contract", "The contract address")
-  .addParam("playerindex", "Your player index (0 or 1)")
-  .addOptionalParam("account", "Account index to use (0, 1, 2, etc.)", "0")
-  .setAction(async function (taskArguments: TaskArguments, { ethers, fhevm }) {
-    const { contract: contractAddress, playerindex, account } = taskArguments;
     const signers = await ethers.getSigners();
-    const accountIndex = parseInt(account);
-    const signer = signers[accountIndex];
+    const cardGameContract = await ethers.getContractAt("EncryptedCardGameV2", CardGameDeployment.address);
+
+    try {
+      const gameInfo = await cardGameContract.getGameInfo(gameId);
+
+      const stateNames = ["Waiting", "Playing", "Finished"];
+
+      console.log(`Game ${gameId} Information:`);
+      console.log(`- State: ${stateNames[gameInfo.state]}`);
+      console.log(`- Round: ${gameInfo.round}`);
+      console.log(`- Players Joined: ${gameInfo.joined}/2`);
+      console.log(`- Player 1: ${gameInfo.player1}`);
+      console.log(`- Player 2: ${gameInfo.player2}`);
+    } catch (error) {
+      console.error(`Error getting game info: ${error}`);
+    }
+  });
+
+/**
+ * Example:
+ *   - npx hardhat --network localhost game:cards --gameid 0 --player 0
+ *   - npx hardhat --network sepolia game:cards --gameid 0 --player 0
+ */
+task("game:cards", "Gets player's cards in a game (requires decryption)")
+  .addOptionalParam("address", "Optionally specify the EncryptedCardGameV2 contract address")
+  .addParam("gameid", "The game ID")
+  .addParam("player", "The player index (0 or 1)")
+  .setAction(async function (taskArguments: TaskArguments, hre) {
+    const { ethers, deployments, fhevm } = hre;
+
+    const gameId = parseInt(taskArguments.gameid);
+    if (!Number.isInteger(gameId) || gameId < 0) {
+      throw new Error(`Argument --gameid is not a valid non-negative integer`);
+    }
+
+    const playerIndex = parseInt(taskArguments.player);
+    if (!Number.isInteger(playerIndex) || (playerIndex !== 0 && playerIndex !== 1)) {
+      throw new Error(`Argument --player must be 0 or 1`);
+    }
 
     await fhevm.initializeCLIApi();
 
-    const playerIndex = parseInt(playerindex);
-    if (![0, 1].includes(playerIndex)) {
-      throw new Error("Player index must be 0 or 1");
+    const CardGameDeployment = taskArguments.address
+      ? { address: taskArguments.address }
+      : await deployments.get("EncryptedCardGameV2");
+    console.log(`EncryptedCardGameV2: ${CardGameDeployment.address}`);
+
+    const signers = await ethers.getSigners();
+    const cardGameContract = await ethers.getContractAt("EncryptedCardGameV2", CardGameDeployment.address);
+
+    try {
+      const playerCards = await cardGameContract.getPlayerCards(gameId, playerIndex);
+
+      console.log(`Player ${playerIndex} Cards in Game ${gameId}:`);
+
+      const cardTypeNames = ["Eagle", "Bear", "Snake"];
+
+      for (let i = 0; i < 6; i++) {
+        // Decrypt the card type
+        let cardTypeName = "Unknown";
+        try {
+          if (playerCards.types[i] !== ethers.ZeroHash) {
+            const decryptedType = await fhevm.userDecryptEuint(
+              FhevmType.euint8,
+              playerCards.types[i],
+              CardGameDeployment.address,
+              signers[0],
+            );
+            cardTypeName = cardTypeNames[decryptedType] || `Unknown(${decryptedType})`;
+          }
+        } catch (decryptError) {
+          console.log(`Cannot decrypt card ${i} type: ${decryptError}`);
+        }
+
+        console.log(`- Card ${i}: ${cardTypeName}, Health: ${playerCards.healths[i]}, Alive: ${playerCards.aliveStatus[i]}`);
+      }
+
+      const aliveCount = await cardGameContract.getAliveCount(gameId, playerIndex);
+      console.log(`Total Alive Cards: ${aliveCount}`);
+    } catch (error) {
+      console.error(`Error getting player cards: ${error}`);
     }
-
-    const contract = await ethers.getContractAt("EncryptedCardGame", contractAddress);
-
-    console.log("Getting encrypted cards...");
-    const [types, healths, aliveStatus] = await contract.connect(signer).getPlayerCards(playerIndex);
-
-    console.log("Decrypting cards...");
-    
-    console.log("=== Your Cards ===");
-    for (let i = 0; i < 6; i++) {
-      const cardType = await fhevm.userDecryptEuint(FhevmType.euint8, types[i], contractAddress, signer);
-      const cardHealth = await fhevm.userDecryptEuint(FhevmType.euint8, healths[i], contractAddress, signer);
-      const isAlive = await fhevm.userDecryptEbool(aliveStatus[i], contractAddress, signer);
-      
-      const cardName = getCardName(Number(cardType));
-      const status = isAlive ? "Alive" : "Dead";
-      
-      console.log(`Card ${i}: ${cardName} (${cardHealth} HP) - ${status}`);
-    }
-
-    // Get alive count
-    const aliveCount = await contract.connect(signer).getAliveCount(playerIndex);
-    const decryptedAliveCount = await fhevm.userDecryptEuint(FhevmType.euint8, aliveCount, contractAddress, signer);
-    console.log(`\nAlive cards: ${decryptedAliveCount}`);
   });
-
-task("game:battle", "Get battle result for a round")
-  .addParam("contract", "The contract address")
-  .addParam("round", "The round number")
-  .setAction(async function (taskArguments: TaskArguments, { ethers, fhevm }) {
-    const { contract: contractAddress, round } = taskArguments;
-    const [signer] = await ethers.getSigners();
-
-    await fhevm.initializeCLIApi();
-
-    const roundNumber = parseInt(round);
-    const contract = await ethers.getContractAt("EncryptedCardGame", contractAddress);
-
-    console.log(`Getting battle result for round ${roundNumber}...`);
-    
-    const encryptedResult = await contract.getBattleResult(roundNumber);
-    const result = await fhevm.userDecryptEuint(FhevmType.euint8, encryptedResult, contractAddress, signer);
-    
-    console.log("=== Battle Result ===");
-    console.log("Round:", roundNumber);
-    console.log("Result:", getBattleResultName(Number(result)));
-  });
-
-// Helper functions
-function getGameStateName(state: any): string {
-  const stateNum = Number(state);
-  switch (stateNum) {
-    case 0: return "(Waiting for players)";
-    case 1: return "(Playing)";
-    case 2: return "(Finished)";
-    default: return "(Unknown)";
-  }
-}
-
-function getCardName(cardType: number): string {
-  switch (cardType) {
-    case 0: return "Eagle";
-    case 1: return "Bear";
-    case 2: return "Snake";
-    default: return "Unknown";
-  }
-}
-
-function getBattleResultName(result: number): string {
-  switch (result) {
-    case 0: return "Draw";
-    case 1: return "Player 1 wins";
-    case 2: return "Player 2 wins";
-    default: return "Unknown";
-  }
-}

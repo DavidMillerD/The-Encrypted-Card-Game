@@ -10,14 +10,14 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   //   log: true,
   // });
 
-  const deployedEncryptedCardGame = await deploy("EncryptedCardGame", {
+  const deployedEncryptedCardGame = await deploy("EncryptedCardGameV2", {
     from: deployer,
     log: true,
   });
 
   // console.log(`FHECounter contract: `, deployedFHECounter.address);
-  console.log(`EncryptedCardGame contract: `, deployedEncryptedCardGame.address);
+  console.log(`EncryptedCardGameV2 contract: `, deployedEncryptedCardGame.address);
 };
 export default func;
 func.id = "deploy_contracts"; // id required to prevent reexecution
-func.tags = ["FHECounter", "EncryptedCardGame"];
+func.tags = ["FHECounter", "EncryptedCardGameV2"];

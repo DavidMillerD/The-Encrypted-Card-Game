@@ -1,35 +1,18 @@
-// EncryptedCardGame contract deployed on Sepolia
+// EncryptedCardGameV2 contract - Multi-game room architecture
+// Note: This will be updated with the deployed V2 contract address
 export const CONTRACT_ADDRESS = '0xBce452Dcda757C451459a19a103364BC3728FE59';
 
-// Generated ABI from contract artifacts - Auto-synced from EncryptedCardGame.json
+// Generated ABI from contract artifacts - Auto-synced from EncryptedCardGameV2.json
 export const CONTRACT_ABI = [
   {
-    "inputs": [],
-    "stateMutability": "nonpayable",
-    "type": "constructor"
-  },
-  {
     "anonymous": false,
     "inputs": [
       {
-        "indexed": false,
-        "internalType": "uint8",
-        "name": "round",
-        "type": "uint8"
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "gameId",
+        "type": "uint256"
       },
-      {
-        "indexed": false,
-        "internalType": "uint8",
-        "name": "winner",
-        "type": "uint8"
-      }
-    ],
-    "name": "BattleResult",
-    "type": "event"
-  },
-  {
-    "anonymous": false,
-    "inputs": [
       {
         "indexed": true,
         "internalType": "address",
@@ -39,7 +22,7 @@ export const CONTRACT_ABI = [
       {
         "indexed": false,
         "internalType": "uint8",
-        "name": "round",
+        "name": "cardIndex",
         "type": "uint8"
       }
     ],
@@ -49,6 +32,31 @@ export const CONTRACT_ABI = [
   {
     "anonymous": false,
     "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "gameId",
+        "type": "uint256"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "creator",
+        "type": "address"
+      }
+    ],
+    "name": "GameCreated",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "gameId",
+        "type": "uint256"
+      },
       {
         "indexed": false,
         "internalType": "address",
@@ -61,13 +69,26 @@ export const CONTRACT_ABI = [
   },
   {
     "anonymous": false,
-    "inputs": [],
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "gameId",
+        "type": "uint256"
+      }
+    ],
     "name": "GameStarted",
     "type": "event"
   },
   {
     "anonymous": false,
     "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "gameId",
+        "type": "uint256"
+      },
       {
         "indexed": true,
         "internalType": "address",
@@ -85,20 +106,59 @@ export const CONTRACT_ABI = [
     "type": "event"
   },
   {
+    "inputs": [],
+    "name": "createGame",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
     "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "name": "games",
+    "outputs": [
+      {
+        "internalType": "enum EncryptedCardGameV2.GameState",
+        "name": "state",
+        "type": "uint8"
+      },
+      {
+        "internalType": "uint8",
+        "name": "playersJoined",
+        "type": "uint8"
+      },
+      {
+        "internalType": "uint8",
+        "name": "currentRound",
+        "type": "uint8"
+      },
       {
         "internalType": "address",
         "name": "winner",
         "type": "address"
       }
     ],
-    "name": "endGame",
-    "outputs": [],
-    "stateMutability": "nonpayable",
+    "stateMutability": "view",
     "type": "function"
   },
   {
     "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "gameId",
+        "type": "uint256"
+      },
       {
         "internalType": "uint8",
         "name": "playerIndex",
@@ -108,9 +168,9 @@ export const CONTRACT_ABI = [
     "name": "getAliveCount",
     "outputs": [
       {
-        "internalType": "euint8",
+        "internalType": "uint8",
         "name": "",
-        "type": "bytes32"
+        "type": "uint8"
       }
     ],
     "stateMutability": "view",
@@ -119,28 +179,15 @@ export const CONTRACT_ABI = [
   {
     "inputs": [
       {
-        "internalType": "uint8",
-        "name": "round",
-        "type": "uint8"
+        "internalType": "uint256",
+        "name": "gameId",
+        "type": "uint256"
       }
     ],
-    "name": "getBattleResult",
-    "outputs": [
-      {
-        "internalType": "euint8",
-        "name": "",
-        "type": "bytes32"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [],
     "name": "getGameInfo",
     "outputs": [
       {
-        "internalType": "enum EncryptedCardGame.GameState",
+        "internalType": "enum EncryptedCardGameV2.GameState",
         "name": "state",
         "type": "uint8"
       },
@@ -171,6 +218,11 @@ export const CONTRACT_ABI = [
   {
     "inputs": [
       {
+        "internalType": "uint256",
+        "name": "gameId",
+        "type": "uint256"
+      },
+      {
         "internalType": "uint8",
         "name": "playerIndex",
         "type": "uint8"
@@ -184,14 +236,14 @@ export const CONTRACT_ABI = [
         "type": "bytes32[6]"
       },
       {
-        "internalType": "euint8[6]",
+        "internalType": "uint8[6]",
         "name": "healths",
-        "type": "bytes32[6]"
+        "type": "uint8[6]"
       },
       {
-        "internalType": "ebool[6]",
+        "internalType": "bool[6]",
         "name": "aliveStatus",
-        "type": "bytes32[6]"
+        "type": "bool[6]"
       }
     ],
     "stateMutability": "view",
@@ -200,13 +252,13 @@ export const CONTRACT_ABI = [
   {
     "inputs": [
       {
-        "internalType": "externalEuint8[6]",
-        "name": "encryptedCardTypes",
-        "type": "bytes32[6]"
+        "internalType": "uint256",
+        "name": "gameId",
+        "type": "uint256"
       },
       {
         "internalType": "externalEuint8[6]",
-        "name": "encryptedCardHealth",
+        "name": "encryptedCardTypes",
         "type": "bytes32[6]"
       },
       {
@@ -221,16 +273,29 @@ export const CONTRACT_ABI = [
     "type": "function"
   },
   {
+    "inputs": [],
+    "name": "nextGameId",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
     "inputs": [
       {
-        "internalType": "externalEuint8",
-        "name": "encryptedCardIndex",
-        "type": "bytes32"
+        "internalType": "uint256",
+        "name": "gameId",
+        "type": "uint256"
       },
       {
-        "internalType": "bytes",
-        "name": "inputProof",
-        "type": "bytes"
+        "internalType": "uint8",
+        "name": "cardIndex",
+        "type": "uint8"
       }
     ],
     "name": "playCard",
@@ -239,92 +304,19 @@ export const CONTRACT_ABI = [
     "type": "function"
   },
   {
-    "inputs": [],
-    "name": "requestGameEndCheck",
-    "outputs": [
-      {
-        "internalType": "euint8",
-        "name": "",
-        "type": "bytes32"
-      },
-      {
-        "internalType": "euint8",
-        "name": "",
-        "type": "bytes32"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [],
-    "name": "currentRound",
-    "outputs": [
-      {
-        "internalType": "uint8",
-        "name": "",
-        "type": "uint8"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [],
-    "name": "gameState",
-    "outputs": [
-      {
-        "internalType": "enum EncryptedCardGame.GameState",
-        "name": "",
-        "type": "uint8"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
     "inputs": [
-      {
-        "internalType": "uint8",
-        "name": "",
-        "type": "uint8"
-      }
-    ],
-    "name": "hasPlayedCard",
-    "outputs": [
-      {
-        "internalType": "bool",
-        "name": "",
-        "type": "bool"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "uint8",
-        "name": "",
-        "type": "uint8"
-      }
-    ],
-    "name": "players",
-    "outputs": [
       {
         "internalType": "address",
-        "name": "playerAddress",
+        "name": "",
         "type": "address"
-      },
+      }
+    ],
+    "name": "playerToGame",
+    "outputs": [
       {
-        "internalType": "euint8",
-        "name": "aliveCount",
-        "type": "bytes32"
-      },
-      {
-        "internalType": "bool",
-        "name": "hasJoined",
-        "type": "bool"
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
       }
     ],
     "stateMutability": "view",
@@ -332,15 +324,15 @@ export const CONTRACT_ABI = [
   },
   {
     "inputs": [],
-    "name": "playersJoined",
+    "name": "protocolId",
     "outputs": [
       {
-        "internalType": "uint8",
+        "internalType": "uint256",
         "name": "",
-        "type": "uint8"
+        "type": "uint256"
       }
     ],
-    "stateMutability": "view",
+    "stateMutability": "pure",
     "type": "function"
   }
 ] as const;

@@ -1,6 +1,6 @@
 import { HardhatEthersSigner } from "@nomicfoundation/hardhat-ethers/signers";
 import { ethers, fhevm } from "hardhat";
-import { EncryptedCardGame, EncryptedCardGame__factory } from "../types";
+import { EncryptedCardGameV2, EncryptedCardGameV2__factory } from "../types";
 import { expect } from "chai";
 import { FhevmType } from "@fhevm/hardhat-plugin";
 
@@ -17,8 +17,8 @@ enum CardType {
 }
 
 async function deployFixture() {
-  const factory = (await ethers.getContractFactory("EncryptedCardGame")) as EncryptedCardGame__factory;
-  const gameContract = (await factory.deploy()) as EncryptedCardGame;
+  const factory = (await ethers.getContractFactory("EncryptedCardGameV2")) as EncryptedCardGameV2__factory;
+  const gameContract = (await factory.deploy()) as EncryptedCardGameV2;
   const gameContractAddress = await gameContract.getAddress();
 
   return { gameContract, gameContractAddress };

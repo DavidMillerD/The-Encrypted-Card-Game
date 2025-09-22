@@ -7,111 +7,134 @@ import {SepoliaConfig} from "@fhevm/solidity/config/ZamaConfig.sol";
 contract EncryptedCardGame is SepoliaConfig {
     enum GameState { Waiting, Playing, Finished }
     enum CardType { Eagle, Bear, Snake }
-    
+
     struct Card {
-        euint8 cardType; // 0: Eagle, 1: Bear, 2: Snake
-        euint8 health;   // Health points
-        ebool isAlive;   // Whether card is alive
+        euint8 cardType; // 0: Eagle, 1: Bear, 2: Snake (encrypted)
+        uint8 health;    // Health points (always 2)
+        bool isAlive;    // Whether card is alive (not encrypted)
     }
-    
+
     struct Player {
         address playerAddress;
         Card[6] cards;
-        euint8 aliveCount;
+        uint8 aliveCount; // Not encrypted
         bool hasJoined;
     }
+
+    struct Game {
+        GameState state;
+        Player[2] players;
+        uint8 playersJoined;
+        uint8 currentRound;
+        uint8[2] currentPlayedCards; // Indexes of cards played this round
+        bool[2] hasPlayedCard; // Track if player has played card this round
+        mapping(uint8 => euint8) battleResults; // round => result
+        address winner;
+    }
+
+    uint256 public nextGameId;
+    mapping(uint256 => Game) public games;
+    mapping(address => uint256) public playerToGame; // Track which game a player is in
     
-    GameState public gameState;
-    Player[2] public players;
-    uint8 public playersJoined;
-    uint8 public currentRound;
+    event GameCreated(uint256 indexed gameId, address indexed creator);
+    event PlayerJoined(uint256 indexed gameId, address indexed player, uint8 playerIndex);
+    event GameStarted(uint256 indexed gameId);
+    event CardPlayed(uint256 indexed gameId, address indexed player, uint8 round);
+    event BattleResult(uint256 indexed gameId, uint8 round, uint8 winner);
+    event GameEnded(uint256 indexed gameId, address winner);
     
-    euint8[2] public currentPlayedCards; // Indexes of cards played this round
-    bool[2] public hasPlayedCard; // Track if player has played card this round
-    euint8[2] public battleResults; // 0: draw, 1: player0 wins, 2: player1 wins
-    
-    event PlayerJoined(address indexed player, uint8 playerIndex);
-    event GameStarted();
-    event CardPlayed(address indexed player, uint8 round);
-    event BattleResult(uint8 round, uint8 winner);
-    event GameEnded(address winner);
-    
-    modifier onlyValidPlayer() {
-        require(msg.sender == players[0].playerAddress || msg.sender == players[1].playerAddress, "Not a valid player");
+    modifier gameExists(uint256 gameId) {
+        require(gameId < nextGameId, "Game does not exist");
         _;
     }
-    
-    modifier onlyInState(GameState _state) {
-        require(gameState == _state, "Invalid game state");
+
+    modifier onlyGamePlayer(uint256 gameId) {
+        Game storage game = games[gameId];
+        require(
+            msg.sender == game.players[0].playerAddress ||
+            msg.sender == game.players[1].playerAddress,
+            "Not a player in this game"
+        );
         _;
     }
-    
+
+    modifier onlyInGameState(uint256 gameId, GameState _state) {
+        require(games[gameId].state == _state, "Invalid game state");
+        _;
+    }
+
     constructor() {
-        gameState = GameState.Waiting;
-        playersJoined = 0;
-        currentRound = 0;
+        nextGameId = 0;
+    }
+
+    function createGame() external returns (uint256) {
+        require(playerToGame[msg.sender] == 0 || games[playerToGame[msg.sender]].state == GameState.Finished, "Already in a game");
+
+        uint256 gameId = nextGameId++;
+        Game storage newGame = games[gameId];
+        newGame.state = GameState.Waiting;
+        newGame.playersJoined = 0;
+        newGame.currentRound = 0;
+
+        playerToGame[msg.sender] = gameId;
+
+        emit GameCreated(gameId, msg.sender);
+        return gameId;
     }
     
     function joinGame(
+        uint256 gameId,
         externalEuint8[6] calldata encryptedCardTypes,
-        externalEuint8[6] calldata encryptedCardHealth,
         bytes calldata inputProof
-    ) external onlyInState(GameState.Waiting) {
-        require(playersJoined < 2, "Game is full");
-        require(!players[0].hasJoined || players[0].playerAddress != msg.sender, "Player already joined");
-        require(!players[1].hasJoined || players[1].playerAddress != msg.sender, "Player already joined");
-        
-        uint8 playerIndex = playersJoined;
-        players[playerIndex].playerAddress = msg.sender;
-        players[playerIndex].hasJoined = true;
-        players[playerIndex].aliveCount = FHE.asEuint8(6);
+    ) external gameExists(gameId) onlyInGameState(gameId, GameState.Waiting) {
+        Game storage game = games[gameId];
+        require(game.playersJoined < 2, "Game is full");
+        require(!game.players[0].hasJoined || game.players[0].playerAddress != msg.sender, "Player already joined");
+        require(!game.players[1].hasJoined || game.players[1].playerAddress != msg.sender, "Player already joined");
+        require(playerToGame[msg.sender] == 0 || games[playerToGame[msg.sender]].state == GameState.Finished, "Already in another game");
+
+        uint8 playerIndex = game.playersJoined;
+        game.players[playerIndex].playerAddress = msg.sender;
+        game.players[playerIndex].hasJoined = true;
+        game.players[playerIndex].aliveCount = 6;
+
+        playerToGame[msg.sender] = gameId;
         
         // Initialize player's cards
         for (uint8 i = 0; i < 6; i++) {
             euint8 cardType = FHE.fromExternal(encryptedCardTypes[i], inputProof);
-            euint8 health = FHE.fromExternal(encryptedCardHealth[i], inputProof);
-            
+            // Note: encryptedCardHealth is ignored, all cards have health = 2
+
             // Validate card type (0, 1, or 2)
             ebool validType1 = FHE.eq(cardType, 0);
             ebool validType2 = FHE.eq(cardType, 1);
             ebool validType3 = FHE.eq(cardType, 2);
             ebool isValidType = FHE.or(FHE.or(validType1, validType2), validType3);
-            
-            // Validate health (1-10)
-            ebool validHealth = FHE.and(FHE.ge(health, 1), FHE.le(health, 10));
-            
-            players[playerIndex].cards[i] = Card({
-                cardType: FHE.select(FHE.and(isValidType, validHealth), cardType, FHE.asEuint8(0)),
-                health: FHE.select(FHE.and(isValidType, validHealth), health, FHE.asEuint8(1)),
-                isAlive: FHE.asEbool(true)
+
+            game.players[playerIndex].cards[i] = Card({
+                cardType: FHE.select(isValidType, cardType, FHE.asEuint8(0)),
+                health: 2, // All cards have health 2
+                isAlive: true
             });
-            
-            // Set ACL permissions
-            FHE.allowThis(players[playerIndex].cards[i].cardType);
-            FHE.allowThis(players[playerIndex].cards[i].health);
-            FHE.allowThis(players[playerIndex].cards[i].isAlive);
-            FHE.allow(players[playerIndex].cards[i].cardType, msg.sender);
-            FHE.allow(players[playerIndex].cards[i].health, msg.sender);
-            FHE.allow(players[playerIndex].cards[i].isAlive, msg.sender);
+
+            // Set ACL permissions only for encrypted fields
+            FHE.allowThis(game.players[playerIndex].cards[i].cardType);
+            FHE.allow(game.players[playerIndex].cards[i].cardType, msg.sender);
         }
+
+        game.playersJoined++;
+        emit PlayerJoined(gameId, msg.sender, playerIndex);
         
-        // Set ACL for alive count
-        FHE.allowThis(players[playerIndex].aliveCount);
-        FHE.allow(players[playerIndex].aliveCount, msg.sender);
-        
-        playersJoined++;
-        emit PlayerJoined(msg.sender, playerIndex);
-        
-        if (playersJoined == 2) {
-            gameState = GameState.Playing;
-            emit GameStarted();
+        if (game.playersJoined == 2) {
+            game.state = GameState.Playing;
+            emit GameStarted(gameId);
         }
     }
     
     function playCard(
-        externalEuint8 encryptedCardIndex,
-        bytes calldata inputProof
-    ) external onlyValidPlayer onlyInState(GameState.Playing) {
+        uint256 gameId,
+        uint8 cardIndex
+    ) external gameExists(gameId) onlyGamePlayer(gameId) onlyInGameState(gameId, GameState.Playing) {
         uint8 playerIndex = (msg.sender == players[0].playerAddress) ? 0 : 1;
         
         euint8 cardIndex = FHE.fromExternal(encryptedCardIndex, inputProof);
@@ -119,12 +142,9 @@ contract EncryptedCardGame is SepoliaConfig {
         // Validate card index (0-5)
         ebool validIndex = FHE.le(cardIndex, 5);
 
-        // Check if the selected card is alive
-        ebool cardIsAlive = getCardAliveByIndex(playerIndex, cardIndex);
-        ebool canPlayCard = FHE.and(validIndex, cardIsAlive);
-
-        // If card is not playable, default to first card (for safety)
-        euint8 safeIndex = FHE.select(canPlayCard, cardIndex, FHE.asEuint8(0));
+        // Since isAlive is not encrypted, we'll validate the card later in battle
+        // For now, just store the encrypted card index
+        euint8 safeIndex = FHE.select(validIndex, cardIndex, FHE.asEuint8(0));
         
         // Store the played card index
         currentPlayedCards[playerIndex] = safeIndex;
@@ -227,82 +247,48 @@ contract EncryptedCardGame is SepoliaConfig {
         return result;
     }
     
-    function getCardHealthByIndex(uint8 playerIndex, euint8 cardIndex) internal returns (euint8) {
-        euint8 result = players[playerIndex].cards[0].health;
-        
-        for (uint8 i = 0; i < 6; i++) {
-            ebool isIndex = FHE.eq(cardIndex, i);
-            result = FHE.select(isIndex, players[playerIndex].cards[i].health, result);
-        }
-        
-        return result;
+    function getCardHealthByIndex(uint8 playerIndex, uint8 cardIndex) internal view returns (uint8) {
+        require(cardIndex < 6, "Invalid card index");
+        return players[playerIndex].cards[cardIndex].health;
     }
     
-    function getCardAliveByIndex(uint8 playerIndex, euint8 cardIndex) internal returns (ebool) {
-        ebool result = players[playerIndex].cards[0].isAlive;
-        
-        for (uint8 i = 0; i < 6; i++) {
+    function getCardAliveByIndex(uint8 playerIndex, uint8 cardIndex) internal view returns (bool) {
+        require(cardIndex < 6, "Invalid card index");
+        return players[playerIndex].cards[cardIndex].isAlive;
+    }
+
+    function isCardAliveAtIndex(uint8 playerIndex, euint8 cardIndex) internal view returns (ebool) {
+        ebool result = FHE.asEbool(players[playerIndex].cards[0].isAlive);
+
+        for (uint8 i = 1; i < 6; i++) {
             ebool isIndex = FHE.eq(cardIndex, i);
-            result = FHE.select(isIndex, players[playerIndex].cards[i].isAlive, result);
+            result = FHE.select(isIndex, FHE.asEbool(players[playerIndex].cards[i].isAlive), result);
         }
-        
+
         return result;
     }
     
     function updateCardStatus(euint8 result, euint8 card1Index, euint8 card2Index) internal {
-        // If player 1 wins (result == 1), kill player 2's card
-        // If player 2 wins (result == 2), kill player 1's card
-        // If draw (result == 0), kill both cards
-        
-        ebool player1Wins = FHE.eq(result, 1);
-        ebool player2Wins = FHE.eq(result, 2);
-        ebool isDraw = FHE.eq(result, 0);
-        
-        // Kill cards based on result
-        for (uint8 i = 0; i < 6; i++) {
-            // Update player 1's cards
-            ebool isPlayer1Card = FHE.eq(card1Index, i);
-            ebool killPlayer1Card = FHE.and(isPlayer1Card, FHE.or(player2Wins, isDraw));
-            players[0].cards[i].isAlive = FHE.select(
-                killPlayer1Card,
-                FHE.asEbool(false),
-                players[0].cards[i].isAlive
-            );
+        // Since isAlive is no longer encrypted, we need to decrypt the indices and result first
+        // This requires a different approach - we'll update this in the battle logic instead
 
-            // Set ACL permissions for updated player 1 cards
-            FHE.allowThis(players[0].cards[i].isAlive);
-            FHE.allow(players[0].cards[i].isAlive, players[0].playerAddress);
-
-            // Update player 2's cards
-            ebool isPlayer2Card = FHE.eq(card2Index, i);
-            ebool killPlayer2Card = FHE.and(isPlayer2Card, FHE.or(player1Wins, isDraw));
-            players[1].cards[i].isAlive = FHE.select(
-                killPlayer2Card,
-                FHE.asEbool(false),
-                players[1].cards[i].isAlive
-            );
-
-            // Set ACL permissions for updated player 2 cards
-            FHE.allowThis(players[1].cards[i].isAlive);
-            FHE.allow(players[1].cards[i].isAlive, players[1].playerAddress);
-        }
-        
-        // Update alive counts
-        updateAliveCount(0);
-        updateAliveCount(1);
+        // For now, store the encrypted battle result for later processing
+        battleResults[currentRound] = result;
+        FHE.allowThis(battleResults[currentRound]);
+        FHE.allow(battleResults[currentRound], players[0].playerAddress);
+        FHE.allow(battleResults[currentRound], players[1].playerAddress);
     }
     
     function updateAliveCount(uint8 playerIndex) internal {
-        euint8 count = FHE.asEuint8(0);
-        
+        uint8 count = 0;
+
         for (uint8 i = 0; i < 6; i++) {
-            euint8 increment = FHE.select(players[playerIndex].cards[i].isAlive, FHE.asEuint8(1), FHE.asEuint8(0));
-            count = FHE.add(count, increment);
+            if (players[playerIndex].cards[i].isAlive) {
+                count++;
+            }
         }
-        
+
         players[playerIndex].aliveCount = count;
-        FHE.allowThis(players[playerIndex].aliveCount);
-        FHE.allow(players[playerIndex].aliveCount, players[playerIndex].playerAddress);
     }
     
     function checkGameEnd() internal {
@@ -311,8 +297,8 @@ contract EncryptedCardGame is SepoliaConfig {
         // This is because we cannot decrypt inside the contract in FHEVM v0.7
     }
     
-    function requestGameEndCheck() external view returns (euint8, euint8) {
-        // Return both players' alive counts for external decryption and game end decision
+    function requestGameEndCheck() external view returns (uint8, uint8) {
+        // Return both players' alive counts - no decryption needed since they're not encrypted
         return (players[0].aliveCount, players[1].aliveCount);
     }
     
@@ -326,10 +312,10 @@ contract EncryptedCardGame is SepoliaConfig {
     }
     
     // View functions
-    function getPlayerCards(uint8 playerIndex) external view returns (euint8[6] memory types, euint8[6] memory healths, ebool[6] memory aliveStatus) {
+    function getPlayerCards(uint8 playerIndex) external view returns (euint8[6] memory types, uint8[6] memory healths, bool[6] memory aliveStatus) {
         require(playerIndex < 2, "Invalid player index");
         require(msg.sender == players[playerIndex].playerAddress, "Not authorized");
-        
+
         for (uint8 i = 0; i < 6; i++) {
             types[i] = players[playerIndex].cards[i].cardType;
             healths[i] = players[playerIndex].cards[i].health;
@@ -337,10 +323,10 @@ contract EncryptedCardGame is SepoliaConfig {
         }
     }
     
-    function getAliveCount(uint8 playerIndex) external view returns (euint8) {
+    function getAliveCount(uint8 playerIndex) external view returns (uint8) {
         require(playerIndex < 2, "Invalid player index");
         require(msg.sender == players[playerIndex].playerAddress, "Not authorized");
-        
+
         return players[playerIndex].aliveCount;
     }
     
