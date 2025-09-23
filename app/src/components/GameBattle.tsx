@@ -144,8 +144,17 @@ export function GameBattle({ gameId, playerIndex, onGameUpdate }: GameBattleProp
     console.log(`[DECRYPT] GameId:`, gameId);
     console.log(`[DECRYPT] PlayerIndex:`, playerIndex);
 
-    if (!instance || !address) {
-      console.error(`[DECRYPT] Missing requirements - instance: ${!!instance}, address: ${!!address}`);
+    setError(null); // 清除之前的错误信息
+
+    if (!instance) {
+      console.error(`[DECRYPT] FHEVM instance not ready`);
+      setError('FHEVM实例还未准备好，请稍等片刻再试');
+      return;
+    }
+
+    if (!address) {
+      console.error(`[DECRYPT] Wallet not connected`);
+      setError('请先连接钱包');
       return;
     }
 
@@ -156,6 +165,7 @@ export function GameBattle({ gameId, playerIndex, onGameUpdate }: GameBattleProp
       const resolvedSigner = await signer;
       if (!resolvedSigner) {
         console.error(`[DECRYPT] No signer available`);
+        setError('签名器不可用，请重新连接钱包');
         return;
       }
 
@@ -241,7 +251,13 @@ export function GameBattle({ gameId, playerIndex, onGameUpdate }: GameBattleProp
         stack: err.stack,
         cause: err.cause
       });
-      setError(`Failed to decrypt card ${cardIndex + 1}: ${err.message}`);
+      if (err.message?.includes('FHEVM') || err.message?.includes('instance')) {
+        setError('FHEVM实例连接失败，请刷新页面重试');
+      } else if (err.message?.includes('signer') || err.message?.includes('wallet')) {
+        setError('钱包连接异常，请重新连接钱包');
+      } else {
+        setError(`解密卡牌 ${cardIndex + 1} 失败: ${err.message}`);
+      }
     } finally {
       setDecryptLoading(prev => ({ ...prev, [cardIndex]: false }));
     }
