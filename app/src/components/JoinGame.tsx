@@ -11,7 +11,6 @@ interface JoinGameProps {
 
 interface CardConfig {
   type: number;
-  health: number;
 }
 
 export function JoinGame({ gameId, onJoinSuccess }: JoinGameProps) {
@@ -21,19 +20,19 @@ export function JoinGame({ gameId, onJoinSuccess }: JoinGameProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Default card configuration - user can customize this
+  // Default card configuration - all cards have health 2
   const [cards, setCards] = useState<CardConfig[]>([
-    { type: CARD_TYPES.EAGLE, health: 5 },
-    { type: CARD_TYPES.BEAR, health: 4 },
-    { type: CARD_TYPES.SNAKE, health: 3 },
-    { type: CARD_TYPES.EAGLE, health: 6 },
-    { type: CARD_TYPES.BEAR, health: 2 },
-    { type: CARD_TYPES.SNAKE, health: 1 },
+    { type: CARD_TYPES.EAGLE },
+    { type: CARD_TYPES.BEAR },
+    { type: CARD_TYPES.SNAKE },
+    { type: CARD_TYPES.EAGLE },
+    { type: CARD_TYPES.BEAR },
+    { type: CARD_TYPES.SNAKE },
   ]);
 
-  const updateCard = (index: number, field: 'type' | 'health', value: number) => {
+  const updateCard = (index: number, type: number) => {
     const newCards = [...cards];
-    newCards[index][field] = value;
+    newCards[index].type = type;
     setCards(newCards);
   };
 
@@ -51,9 +50,6 @@ export function JoinGame({ gameId, onJoinSuccess }: JoinGameProps) {
       for (const card of cards) {
         if (![0, 1, 2].includes(card.type)) {
           throw new Error('Invalid card type');
-        }
-        if (card.health < 1 || card.health > 10) {
-          throw new Error('Card health must be between 1 and 10');
         }
       }
 
@@ -114,10 +110,10 @@ export function JoinGame({ gameId, onJoinSuccess }: JoinGameProps) {
       </h2>
 
       <p style={{ color: '#6b7280', marginBottom: '2rem' }}>
-        Configure your 6 cards and join the battle! Each card has a type (Eagle beats Snake, Bear beats Eagle, Snake beats Bear) and health points (1-10).
+        Configure your 6 cards and join the battle! Each card has a type (Eagle beats Snake, Bear beats Eagle, Snake beats Bear) and 2 health points.
       </p>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '1.5rem', marginBottom: '2rem' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', marginBottom: '2rem' }}>
         {cards.map((card, index) => (
           <div key={index} style={{
             border: '2px solid #e5e7eb',
@@ -135,7 +131,7 @@ export function JoinGame({ gameId, onJoinSuccess }: JoinGameProps) {
               </label>
               <select
                 value={card.type}
-                onChange={(e) => updateCard(index, 'type', parseInt(e.target.value))}
+                onChange={(e) => updateCard(index, parseInt(e.target.value))}
                 style={{
                   width: '100%',
                   padding: '0.5rem',
@@ -150,24 +146,16 @@ export function JoinGame({ gameId, onJoinSuccess }: JoinGameProps) {
               </select>
             </div>
 
-            <div>
-              <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 'medium', color: '#374151', marginBottom: '0.5rem' }}>
-                Health (1-10):
-              </label>
-              <input
-                type="number"
-                min="1"
-                max="10"
-                value={card.health}
-                onChange={(e) => updateCard(index, 'health', parseInt(e.target.value) || 1)}
-                style={{
-                  width: '100%',
-                  padding: '0.5rem',
-                  border: '1px solid #d1d5db',
-                  borderRadius: '6px',
-                  fontSize: '0.875rem'
-                }}
-              />
+            <div style={{
+              padding: '0.5rem',
+              backgroundColor: '#e5e7eb',
+              borderRadius: '6px',
+              textAlign: 'center',
+              fontSize: '0.875rem',
+              color: '#374151',
+              fontWeight: 'medium'
+            }}>
+              Health: 2 HP
             </div>
           </div>
         ))}

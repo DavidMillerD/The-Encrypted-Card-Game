@@ -268,12 +268,6 @@ export function GameBattle({ gameId, playerIndex, onGameUpdate }: GameBattleProp
       setSelectedCard(null);
       onGameUpdate();
 
-      // 刷新卡牌状态
-      setTimeout(() => {
-        fetchMyCards();
-        fetchOpponentCards();
-      }, 2000);
-
     } catch (err: any) {
       console.error('Failed to play card:', err);
       setError(err.message || 'Failed to play card');
