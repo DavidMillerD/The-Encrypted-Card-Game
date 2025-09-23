@@ -5,6 +5,7 @@ import type{ GameInfo } from './EncryptedCardGame';
 
 interface GameListProps {
   onSelectGame: (gameId: number) => void;
+  onJoinGame: (gameId: number) => void;
   selectedGameId: number | null;
   currentUserAddress?: string;
 }
@@ -12,9 +13,10 @@ interface GameListProps {
 interface GameListItem extends GameInfo {
   gameId: number;
   canJoin: boolean;
+  canEnter: boolean;
 }
 
-export function GameList({ onSelectGame, selectedGameId, currentUserAddress }: GameListProps) {
+export function GameList({ onSelectGame, onJoinGame, selectedGameId, currentUserAddress }: GameListProps) {
   const publicClient = usePublicClient();
   const [games, setGames] = useState<GameListItem[]>([]);
   const [loading, setLoading] = useState(false);
@@ -62,11 +64,13 @@ export function GameList({ onSelectGame, selectedGameId, currentUserAddress }: G
           const canJoin = gameInfo.state === GAME_STATE.WAITING &&
                           gameInfo.joined < 2 &&
                           !isPlayerInGame;
+          const canEnter = isPlayerInGame || canJoin; // 可以进入：要么已经在游戏中，要么可以加入
 
           gamesList.push({
             gameId,
             ...gameInfo,
             canJoin,
+            canEnter,
           });
         } catch (gameErr) {
           console.warn(`Failed to fetch game ${gameId}:`, gameErr);
@@ -259,9 +263,31 @@ export function GameList({ onSelectGame, selectedGameId, currentUserAddress }: G
                   backgroundColor: '#dbeafe',
                   borderRadius: '4px',
                   fontSize: '0.875rem',
-                  color: '#1e40af'
+                  color: '#1e40af',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center'
                 }}>
-                  ✓ Selected - {game.canJoin ? 'Ready to join' : 'Can view game status'}
+                  <span>✓ Selected - {getPlayerStatus(game)}</span>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onJoinGame(game.gameId);
+                    }}
+                    disabled={!game.canEnter}
+                    style={{
+                      backgroundColor: game.canEnter ? '#10b981' : '#6b7280',
+                      color: 'white',
+                      padding: '0.5rem 1rem',
+                      borderRadius: '4px',
+                      border: 'none',
+                      fontSize: '0.875rem',
+                      cursor: game.canEnter ? 'pointer' : 'not-allowed',
+                      fontWeight: 'medium'
+                    }}
+                  >
+                    Enter
+                  </button>
                 </div>
               )}
             </div>

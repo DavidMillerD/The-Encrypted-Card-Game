@@ -436,19 +436,8 @@ export function GameBattle({ gameId, playerIndex, onGameUpdate }: GameBattleProp
                     return;
                   }
 
-                  if (card.type === -1) {
-                    // 未解密且存活的卡牌，可以选中或解密
-                    if (selectedCard === card.index) {
-                      // 如果已经选中，点击解密
-                      decryptCard(card.index);
-                    } else {
-                      // 否则选中这张卡
-                      setSelectedCard(card.index);
-                    }
-                  } else {
-                    // 已解密且存活的卡牌，点击选中/取消选中
-                    setSelectedCard(selectedCard === card.index ? null : card.index);
-                  }
+                  // 点击卡牌只用于选中/取消选中
+                  setSelectedCard(selectedCard === card.index ? null : card.index);
                 }}
               />
             ))}
@@ -470,42 +459,61 @@ export function GameBattle({ gameId, playerIndex, onGameUpdate }: GameBattleProp
                 <p style={{ fontSize: '0.875rem', color: '#6b7280', marginBottom: '1rem' }}>
                   已选中卡牌 {selectedCard + 1}
                   {myCards[selectedCard]?.type === -1 && ' (未解密)'}
-                  ，点击"出牌"进行战斗
-                  {myCards[selectedCard]?.type === -1 && ' 或再次点击卡牌进行解密'}
                 </p>
-                <button
-                  onClick={() => playCard(selectedCard)}
-                  disabled={loading}
-                  style={{
-                    backgroundColor: loading ? '#9ca3af' : '#10b981',
-                    color: 'white',
-                    padding: '0.75rem 2rem',
-                    borderRadius: '6px',
-                    border: 'none',
-                    fontSize: '1rem',
-                    fontWeight: 'medium',
-                    cursor: loading ? 'not-allowed' : 'pointer',
-                    marginRight: '1rem'
-                  }}
-                >
-                  {loading ? '出牌中...' : '出牌'}
-                </button>
-                <button
-                  onClick={() => setSelectedCard(null)}
-                  disabled={loading}
-                  style={{
-                    backgroundColor: '#6b7280',
-                    color: 'white',
-                    padding: '0.75rem 1.5rem',
-                    borderRadius: '6px',
-                    border: 'none',
-                    fontSize: '1rem',
-                    fontWeight: 'medium',
-                    cursor: loading ? 'not-allowed' : 'pointer'
-                  }}
-                >
-                  取消选择
-                </button>
+                <div style={{ display: 'flex', justifyContent: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+                  {myCards[selectedCard]?.type === -1 && (
+                    <button
+                      onClick={() => decryptCard(selectedCard)}
+                      disabled={loading || decryptLoading[selectedCard]}
+                      style={{
+                        backgroundColor: decryptLoading[selectedCard] ? '#9ca3af' : '#3b82f6',
+                        color: 'white',
+                        padding: '0.75rem 1.5rem',
+                        borderRadius: '6px',
+                        border: 'none',
+                        fontSize: '1rem',
+                        fontWeight: 'medium',
+                        cursor: (loading || decryptLoading[selectedCard]) ? 'not-allowed' : 'pointer'
+                      }}
+                    >
+                      {decryptLoading[selectedCard] ? '解密中...' : '解密'}
+                    </button>
+                  )}
+
+                  <button
+                    onClick={() => playCard(selectedCard)}
+                    disabled={loading}
+                    style={{
+                      backgroundColor: loading ? '#9ca3af' : '#10b981',
+                      color: 'white',
+                      padding: '0.75rem 2rem',
+                      borderRadius: '6px',
+                      border: 'none',
+                      fontSize: '1rem',
+                      fontWeight: 'medium',
+                      cursor: loading ? 'not-allowed' : 'pointer'
+                    }}
+                  >
+                    {loading ? '出牌中...' : '出牌'}
+                  </button>
+
+                  <button
+                    onClick={() => setSelectedCard(null)}
+                    disabled={loading}
+                    style={{
+                      backgroundColor: '#6b7280',
+                      color: 'white',
+                      padding: '0.75rem 1.5rem',
+                      borderRadius: '6px',
+                      border: 'none',
+                      fontSize: '1rem',
+                      fontWeight: 'medium',
+                      cursor: loading ? 'not-allowed' : 'pointer'
+                    }}
+                  >
+                    取消选择
+                  </button>
+                </div>
               </div>
             )}
           </div>

@@ -99,42 +99,10 @@ export function GameLobby({ onJoinGame }: GameLobbyProps) {
       {/* Game List */}
       <GameList
         onSelectGame={handleGameSelect}
+        onJoinGame={onJoinGame}
         selectedGameId={selectedGameId}
         currentUserAddress={address}
       />
-
-      {/* Selected Game Actions */}
-      {selectedGameId && (
-        <div style={{
-          backgroundColor: 'white',
-          padding: '1.5rem',
-          borderRadius: '12px',
-          boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
-          marginBottom: '2rem',
-          textAlign: 'center'
-        }}>
-          <h3 style={{ fontSize: '1.125rem', fontWeight: 'bold', marginBottom: '1rem', color: '#374151' }}>
-            Selected Game #{selectedGameId}
-          </h3>
-          <button
-            onClick={handleJoinSelectedGame}
-            style={{
-              backgroundColor: '#3b82f6',
-              color: 'white',
-              padding: '0.75rem 2rem',
-              borderRadius: '6px',
-              border: 'none',
-              fontSize: '1rem',
-              fontWeight: 'medium',
-              cursor: 'pointer',
-              transition: 'background-color 0.2s',
-              marginRight: '1rem'
-            }}
-          >
-            Enter Game #{selectedGameId}
-          </button>
-        </div>
-      )}
 
       {/* Error Display */}
       {error && (
