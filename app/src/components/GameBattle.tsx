@@ -3,7 +3,7 @@ import { useAccount } from 'wagmi';
 import { CONTRACT_ADDRESS, CONTRACT_ABI, CARD_NAMES } from '../config/contracts';
 import { useEthersSigner } from '../hooks/useEthersSigner';
 import { useZamaInstance } from '../hooks/useZamaInstance';
-import { getCardImage, getCardEmoji } from '../assets/cards';
+import { getCardEmoji } from '../assets/cards';
 import type { Card } from './EncryptedCardGame';
 
 interface GameBattleProps {
@@ -138,17 +138,38 @@ export function GameBattle({ gameId, playerIndex, onGameUpdate }: GameBattleProp
 
   // 解密指定卡牌
   const decryptCard = async (cardIndex: number) => {
-    if (!instance || !address) return;
+    console.log(`[DECRYPT] Starting decryption for card ${cardIndex}`);
+    console.log(`[DECRYPT] Instance:`, !!instance);
+    console.log(`[DECRYPT] Address:`, address);
+    console.log(`[DECRYPT] GameId:`, gameId);
+    console.log(`[DECRYPT] PlayerIndex:`, playerIndex);
+
+    if (!instance || !address) {
+      console.error(`[DECRYPT] Missing requirements - instance: ${!!instance}, address: ${!!address}`);
+      return;
+    }
 
     try {
       setDecryptLoading(prev => ({ ...prev, [cardIndex]: true }));
 
       const { ethers } = await import('ethers');
       const resolvedSigner = await signer;
-      if (!resolvedSigner) return;
+      if (!resolvedSigner) {
+        console.error(`[DECRYPT] No signer available`);
+        return;
+      }
 
+      console.log(`[DECRYPT] Creating contract instance...`);
       const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, resolvedSigner);
+
+      console.log(`[DECRYPT] Fetching card data from contract...`);
       const [types, healths, aliveStatus] = await contract.getPlayerCards(BigInt(gameId), playerIndex);
+
+      console.log(`[DECRYPT] Card data received:`, {
+        types: types.map((t: any) => t.toString()),
+        healths: healths.map((h: any) => h.toString()),
+        aliveStatus: aliveStatus.map((a: any) => a.toString())
+      });
 
       const handleContractPairs = [
         { handle: types[cardIndex], contractAddress: CONTRACT_ADDRESS },
@@ -156,13 +177,18 @@ export function GameBattle({ gameId, playerIndex, onGameUpdate }: GameBattleProp
         { handle: aliveStatus[cardIndex], contractAddress: CONTRACT_ADDRESS }
       ];
 
+      console.log(`[DECRYPT] Handle contract pairs:`, handleContractPairs);
+
+      console.log(`[DECRYPT] Generating keypair...`);
       const keypair = instance.generateKeypair();
       const startTimeStamp = Math.floor(Date.now() / 1000).toString();
       const durationDays = "10";
       const contractAddresses = [CONTRACT_ADDRESS];
 
+      console.log(`[DECRYPT] Creating EIP712 message...`);
       const eip712 = instance.createEIP712(keypair.publicKey, contractAddresses, startTimeStamp, durationDays);
 
+      console.log(`[DECRYPT] Requesting signature from user...`);
       const signature = await resolvedSigner.signTypedData(
         eip712.domain,
         {
@@ -171,6 +197,7 @@ export function GameBattle({ gameId, playerIndex, onGameUpdate }: GameBattleProp
         eip712.message,
       );
 
+      console.log(`[DECRYPT] Signature received, calling userDecrypt...`);
       const result = await instance.userDecrypt(
         handleContractPairs,
         keypair.privateKey,
@@ -182,9 +209,17 @@ export function GameBattle({ gameId, playerIndex, onGameUpdate }: GameBattleProp
         durationDays,
       );
 
+      console.log(`[DECRYPT] Decryption result:`, result);
+
       const cardType = result[types[cardIndex]];
       const cardHealth = result[healths[cardIndex]];
       const isAlive = result[aliveStatus[cardIndex]];
+
+      console.log(`[DECRYPT] Parsed values:`, {
+        cardType: Number(cardType),
+        cardHealth: Number(cardHealth),
+        isAlive: Boolean(isAlive)
+      });
 
       // 更新指定卡牌的解密状态
       setMyCards(prev => prev.map(card =>
@@ -198,9 +233,16 @@ export function GameBattle({ gameId, playerIndex, onGameUpdate }: GameBattleProp
           : card
       ));
 
+      console.log(`[DECRYPT] Card ${cardIndex} decryption completed successfully`);
+
     } catch (err: any) {
-      console.error(`Failed to decrypt card ${cardIndex}:`, err);
-      setError(`Failed to decrypt card ${cardIndex + 1}`);
+      console.error(`[DECRYPT] Failed to decrypt card ${cardIndex}:`, err);
+      console.error(`[DECRYPT] Error details:`, {
+        message: err.message,
+        stack: err.stack,
+        cause: err.cause
+      });
+      setError(`Failed to decrypt card ${cardIndex + 1}: ${err.message}`);
     } finally {
       setDecryptLoading(prev => ({ ...prev, [cardIndex]: false }));
     }
@@ -266,14 +308,14 @@ export function GameBattle({ gameId, playerIndex, onGameUpdate }: GameBattleProp
         style={{
           border: isSelected ? '2px solid #3b82f6' : card.isAlive ? '1px solid #10b981' : '1px solid #ef4444',
           borderRadius: '8px',
-          padding: '0.5rem',
+          padding: '0.25rem',
           backgroundColor: card.isAlive ? '#f0fdf4' : '#fef2f2',
           cursor: onClick ? 'pointer' : 'default',
           opacity: card.isAlive ? 1 : 0.6,
           transition: 'all 0.2s ease',
           position: 'relative',
           aspectRatio: '2/3',
-          minHeight: '90px',
+          minHeight: '60px',
           display: 'flex',
           flexDirection: 'column',
           justifyContent: 'center',
@@ -301,7 +343,7 @@ export function GameBattle({ gameId, playerIndex, onGameUpdate }: GameBattleProp
         )}
 
         <div style={{ textAlign: 'center' }}>
-          <div style={{ fontSize: '1.5rem', marginBottom: '0.25rem' }}>
+          <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>
             {isOpponent
               ? getCardEmoji(0, true)
               : isDecrypted
@@ -312,23 +354,23 @@ export function GameBattle({ gameId, playerIndex, onGameUpdate }: GameBattleProp
 
           {!isOpponent && isDecrypted && (
             <>
-              <div style={{ fontSize: '0.625rem', fontWeight: 'bold', marginBottom: '0.25rem', color: '#374151' }}>
+              <div style={{ fontSize: '0.875rem', fontWeight: 'bold', marginBottom: '0.25rem', color: '#374151' }}>
                 {CARD_NAMES[(card as DecryptedCard).type as keyof typeof CARD_NAMES]}
               </div>
-              <div style={{ fontSize: '0.5rem', color: '#6b7280' }}>
+              <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>
                 {(card as DecryptedCard).health} HP
               </div>
             </>
           )}
 
           {!isOpponent && !isDecrypted && (
-            <div style={{ fontSize: '0.5rem', color: '#6b7280', marginTop: '0.25rem' }}>
+            <div style={{ fontSize: '0.75rem', color: '#6b7280', marginTop: '0.25rem' }}>
               点击解密
             </div>
           )}
 
           <div style={{
-            fontSize: '0.5rem',
+            fontSize: '0.75rem',
             fontWeight: 'bold',
             marginTop: '0.25rem',
             color: card.isAlive ? '#10b981' : '#ef4444'
@@ -361,7 +403,7 @@ export function GameBattle({ gameId, playerIndex, onGameUpdate }: GameBattleProp
           </h2>
           <div style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(100px, 1fr))',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(70px, 1fr))',
             gap: '0.5rem'
           }}>
             {opponentCards.map((card) => (
@@ -387,7 +429,7 @@ export function GameBattle({ gameId, playerIndex, onGameUpdate }: GameBattleProp
           </h2>
           <div style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(100px, 1fr))',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(70px, 1fr))',
             gap: '0.5rem',
             marginBottom: '2rem'
           }}>
