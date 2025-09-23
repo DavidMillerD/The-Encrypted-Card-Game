@@ -23,8 +23,28 @@ export function EncryptedCardGame() {
   const { address, isConnected } = useAccount();
   const publicClient = usePublicClient();
   const [gameInfo, setGameInfo] = useState<GameInfo | null>(null);
+  const [currentGameId, setCurrentGameId] = useState<number>(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Get player's current game ID
+  const getPlayerGameId = async () => {
+    if (!publicClient || !address) return 0;
+
+    try {
+      const gameId = await publicClient.readContract({
+        address: CONTRACT_ADDRESS as `0x${string}`,
+        abi: CONTRACT_ABI,
+        functionName: 'playerToGame',
+        args: [address],
+      }) as bigint;
+
+      return Number(gameId);
+    } catch (err) {
+      console.error('Error getting player game ID:', err);
+      return 0;
+    }
+  };
 
   // Fetch game info
   const fetchGameInfo = async () => {
@@ -32,10 +52,19 @@ export function EncryptedCardGame() {
 
     try {
       setLoading(true);
+
+      // First get the player's current game ID
+      let gameId = currentGameId;
+      if (address) {
+        gameId = await getPlayerGameId();
+        setCurrentGameId(gameId);
+      }
+
       const result = await publicClient.readContract({
         address: CONTRACT_ADDRESS as `0x${string}`,
         abi: CONTRACT_ABI,
         functionName: 'getGameInfo',
+        args: [BigInt(gameId)],
       }) as [number, number, number, string, string];
 
       setGameInfo({
@@ -158,12 +187,13 @@ export function EncryptedCardGame() {
             {gameInfo && (
               <>
                 {canJoinGame() && (
-                  <JoinGame onJoinSuccess={fetchGameInfo} />
+                  <JoinGame gameId={currentGameId} onJoinSuccess={fetchGameInfo} />
                 )}
 
                 {getPlayerIndex() !== -1 && gameInfo.state === GAME_STATE.PLAYING && (
                   <GameBoard
                     gameInfo={gameInfo}
+                    gameId={currentGameId}
                     playerIndex={getPlayerIndex()}
                     onGameUpdate={fetchGameInfo}
                   />

@@ -1,12 +1,13 @@
 import { useState, useEffect } from 'react';
 import { useAccount } from 'wagmi';
-import { CONTRACT_ADDRESS, CONTRACT_ABI, CARD_NAMES, BATTLE_RESULT } from '../config/contracts';
+import { CONTRACT_ADDRESS, CONTRACT_ABI, CARD_NAMES } from '../config/contracts';
 import { useEthersSigner } from '../hooks/useEthersSigner';
 import { useZamaInstance } from '../hooks/useZamaInstance';
 import type { GameInfo, Card } from './EncryptedCardGame';
 
 interface GameBoardProps {
   gameInfo: GameInfo;
+  gameId: number;
   playerIndex: number;
   onGameUpdate: () => void;
 }
@@ -15,7 +16,7 @@ interface DecryptedCard extends Card {
   index: number;
 }
 
-export function GameBoard({ gameInfo, playerIndex, onGameUpdate }: GameBoardProps) {
+export function GameBoard({ gameInfo, gameId, playerIndex, onGameUpdate }: GameBoardProps) {
   const { address } = useAccount();
   const signer = useEthersSigner();
   const { instance } = useZamaInstance();
@@ -24,7 +25,6 @@ export function GameBoard({ gameInfo, playerIndex, onGameUpdate }: GameBoardProp
   const [loading, setLoading] = useState(false);
   const [cardsLoading, setCardsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [battleResults, setBattleResults] = useState<{ [round: number]: number }>({});
 
   // Fetch player cards
   const fetchPlayerCards = async () => {
@@ -40,8 +40,8 @@ export function GameBoard({ gameInfo, playerIndex, onGameUpdate }: GameBoardProp
 
       const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, resolvedSigner);
 
-      // Get encrypted card data
-      const [types, healths, aliveStatus] = await contract.getPlayerCards(playerIndex);
+      // Get encrypted card data with gameId
+      const [types, healths, aliveStatus] = await contract.getPlayerCards(BigInt(gameId), playerIndex);
 
       // Decrypt the cards
       const cards: DecryptedCard[] = [];
@@ -112,65 +112,6 @@ export function GameBoard({ gameInfo, playerIndex, onGameUpdate }: GameBoardProp
     }
   };
 
-  // Fetch battle results
-  const fetchBattleResults = async () => {
-    if (!instance || !address || gameInfo.round === 0) return;
-
-    try {
-      const { ethers } = await import('ethers');
-      const resolvedSigner = await signer;
-      if (!resolvedSigner) return;
-
-      const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, resolvedSigner);
-
-      const results: { [round: number]: number } = {};
-
-      for (let round = 0; round < gameInfo.round; round++) {
-        try {
-          const encryptedResult = await contract.getBattleResult(round);
-          // Use Zama SDK for battle result decryption
-          const handleContractPairs = [
-            { handle: encryptedResult, contractAddress: CONTRACT_ADDRESS }
-          ];
-
-          const keypair = instance.generateKeypair();
-          const startTimeStamp = Math.floor(Date.now() / 1000).toString();
-          const durationDays = "10";
-          const contractAddresses = [CONTRACT_ADDRESS];
-
-          const eip712 = instance.createEIP712(keypair.publicKey, contractAddresses, startTimeStamp, durationDays);
-
-          const signature = await resolvedSigner.signTypedData(
-            eip712.domain,
-            {
-              UserDecryptRequestVerification: eip712.types.UserDecryptRequestVerification,
-            },
-            eip712.message,
-          );
-
-          const decryptResult = await instance.userDecrypt(
-            handleContractPairs,
-            keypair.privateKey,
-            keypair.publicKey,
-            signature.replace("0x", ""),
-            contractAddresses,
-            address,
-            startTimeStamp,
-            durationDays,
-          );
-
-          const result = decryptResult[encryptedResult];
-          results[round] = Number(result);
-        } catch (err) {
-          console.error(`Failed to decrypt battle result for round ${round}:`, err);
-        }
-      }
-
-      setBattleResults(results);
-    } catch (err) {
-      console.error('Failed to fetch battle results:', err);
-    }
-  };
 
   // Play a card
   const playCard = async (cardIndex: number) => {
@@ -185,11 +126,6 @@ export function GameBoard({ gameInfo, playerIndex, onGameUpdate }: GameBoardProp
 
       console.log(`Playing card at index ${cardIndex}...`);
 
-      // Create encrypted input for card index
-      const input = instance.createEncryptedInput(CONTRACT_ADDRESS, address);
-      input.add8(cardIndex);
-      const encryptedInput = await input.encrypt();
-
       // Get contract instance with signer
       const { ethers } = await import('ethers');
       const resolvedSigner = await signer;
@@ -200,10 +136,10 @@ export function GameBoard({ gameInfo, playerIndex, onGameUpdate }: GameBoardProp
 
       const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, resolvedSigner);
 
-      // Play the card
+      // Play the card with gameId
       const tx = await contract.playCard(
-        encryptedInput.handles[0],
-        encryptedInput.inputProof
+        BigInt(gameId),
+        cardIndex
       );
 
       console.log('Transaction sent, waiting for confirmation...');
@@ -213,10 +149,9 @@ export function GameBoard({ gameInfo, playerIndex, onGameUpdate }: GameBoardProp
       setSelectedCard(null);
       onGameUpdate();
 
-      // Refresh cards and battle results after a short delay
+      // Refresh cards after a short delay
       setTimeout(() => {
         fetchPlayerCards();
-        fetchBattleResults();
       }, 2000);
     } catch (err: any) {
       console.error('Failed to play card:', err);
@@ -229,7 +164,6 @@ export function GameBoard({ gameInfo, playerIndex, onGameUpdate }: GameBoardProp
   // Load cards when component mounts or player changes
   useEffect(() => {
     fetchPlayerCards();
-    fetchBattleResults();
   }, [playerIndex, instance, address]);
 
   const getCardEmoji = (cardType: number) => {
@@ -241,14 +175,6 @@ export function GameBoard({ gameInfo, playerIndex, onGameUpdate }: GameBoardProp
     }
   };
 
-  const getBattleResultText = (result: number) => {
-    switch (result) {
-      case BATTLE_RESULT.DRAW: return 'Draw';
-      case BATTLE_RESULT.PLAYER1_WINS: return 'Player 1 Wins';
-      case BATTLE_RESULT.PLAYER2_WINS: return 'Player 2 Wins';
-      default: return 'Unknown';
-    }
-  };
 
   const aliveCards = playerCards.filter(card => card.isAlive);
 
@@ -369,45 +295,6 @@ export function GameBoard({ gameInfo, playerIndex, onGameUpdate }: GameBoardProp
         )}
       </div>
 
-      {/* Battle Results */}
-      {Object.keys(battleResults).length > 0 && (
-        <div style={{
-          backgroundColor: 'white',
-          padding: '2rem',
-          borderRadius: '12px',
-          boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
-        }}>
-          <h2 style={{ fontSize: '1.5rem', fontWeight: 'bold', marginBottom: '1.5rem', color: '#374151' }}>
-            Battle Results
-          </h2>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '1rem' }}>
-            {Object.entries(battleResults).map(([round, result]) => (
-              <div
-                key={round}
-                style={{
-                  border: '2px solid #e5e7eb',
-                  borderRadius: '8px',
-                  padding: '1rem',
-                  backgroundColor: '#f9fafb',
-                  textAlign: 'center'
-                }}
-              >
-                <div style={{ fontSize: '1rem', fontWeight: 'bold', marginBottom: '0.5rem', color: '#374151' }}>
-                  Round {parseInt(round) + 1}
-                </div>
-                <div style={{
-                  fontSize: '0.875rem',
-                  color: result === BATTLE_RESULT.PLAYER1_WINS && playerIndex === 0 ? '#10b981' :
-                         result === BATTLE_RESULT.PLAYER2_WINS && playerIndex === 1 ? '#10b981' :
-                         result === BATTLE_RESULT.DRAW ? '#f59e0b' : '#ef4444'
-                }}>
-                  {getBattleResultText(result)}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
     </div>
   );
 }

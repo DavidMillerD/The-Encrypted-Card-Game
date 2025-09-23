@@ -5,6 +5,7 @@ import { useEthersSigner } from '../hooks/useEthersSigner';
 import { useZamaInstance } from '../hooks/useZamaInstance';
 
 interface JoinGameProps {
+  gameId: number;
   onJoinSuccess: () => void;
 }
 
@@ -13,7 +14,7 @@ interface CardConfig {
   health: number;
 }
 
-export function JoinGame({ onJoinSuccess }: JoinGameProps) {
+export function JoinGame({ gameId, onJoinSuccess }: JoinGameProps) {
   const { address } = useAccount();
   const signer = useEthersSigner();
   const { instance } = useZamaInstance();
@@ -61,11 +62,8 @@ export function JoinGame({ onJoinSuccess }: JoinGameProps) {
       // Create encrypted input
       const input = instance.createEncryptedInput(CONTRACT_ADDRESS, address);
 
-      // Add card types
+      // Add only card types (the contract expects only card types, not healths)
       cards.forEach(card => input.add8(card.type));
-
-      // Add card health values
-      cards.forEach(card => input.add8(card.health));
 
       const encryptedInput = await input.encrypt();
 
@@ -83,10 +81,10 @@ export function JoinGame({ onJoinSuccess }: JoinGameProps) {
 
       const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, resolvedSigner);
 
-      // Join the game
+      // Join the game with gameId parameter
       const tx = await contract.joinGame(
-        encryptedInput.handles.slice(0, 6),  // Card types
-        encryptedInput.handles.slice(6, 12), // Card healths
+        BigInt(gameId),               // Game ID
+        encryptedInput.handles.slice(0, 6),  // Card types only
         encryptedInput.inputProof
       );
 
