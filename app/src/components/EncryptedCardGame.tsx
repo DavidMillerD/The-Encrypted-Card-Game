@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useAccount, usePublicClient } from 'wagmi';
 import { Header } from './Header';
 import { JoinGame } from './JoinGame';
 import { GameBoard } from './GameBoard';
 import { CONTRACT_ADDRESS, CONTRACT_ABI, GAME_STATE } from '../config/contracts';
+import { useEthersSigner } from '../hooks/useEthersSigner';
 
 export interface GameInfo {
   state: number;
@@ -22,10 +23,12 @@ export interface Card {
 export function EncryptedCardGame() {
   const { address, isConnected } = useAccount();
   const publicClient = usePublicClient();
+  const signer = useEthersSigner();
   const [gameInfo, setGameInfo] = useState<GameInfo | null>(null);
   const [currentGameId, setCurrentGameId] = useState<number>(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [createGameLoading, setCreateGameLoading] = useState(false);
 
   // Get player's current game ID
   const getPlayerGameId = async () => {
@@ -60,26 +63,89 @@ export function EncryptedCardGame() {
         setCurrentGameId(gameId);
       }
 
-      const result = await publicClient.readContract({
-        address: CONTRACT_ADDRESS as `0x${string}`,
-        abi: CONTRACT_ABI,
-        functionName: 'getGameInfo',
-        args: [BigInt(gameId)],
-      }) as [number, number, number, string, string];
+      // If gameId is 0, user hasn't joined any game yet, try to get the latest available game
+      if (gameId === 0) {
+        try {
+          const nextGameId = await publicClient.readContract({
+            address: CONTRACT_ADDRESS as `0x${string}`,
+            abi: CONTRACT_ABI,
+            functionName: 'nextGameId',
+          }) as bigint;
 
-      setGameInfo({
-        state: result[0],
-        round: result[1],
-        joined: result[2],
-        player1: result[3],
-        player2: result[4],
-      });
-      setError(null);
+          // Use the latest game (nextGameId - 1) or 1 if no games exist
+          // Game IDs start from 1, not 0
+          gameId = Number(nextGameId) > 1 ? Number(nextGameId) - 1 : 1;
+          setCurrentGameId(gameId);
+        } catch {
+          gameId = 1; // Default to game 1
+        }
+      }
+
+      try {
+        const result = await publicClient.readContract({
+          address: CONTRACT_ADDRESS as `0x${string}`,
+          abi: CONTRACT_ABI,
+          functionName: 'getGameInfo',
+          args: [BigInt(gameId)],
+        }) as [number, number, number, string, string];
+
+        setGameInfo({
+          state: result[0],
+          round: result[1],
+          joined: result[2],
+          player1: result[3],
+          player2: result[4],
+        });
+        setError(null);
+      } catch (gameErr) {
+        // Game doesn't exist, set gameInfo to null so we can show "create game" option
+        setGameInfo(null);
+        setError('No games available. Create a new game to start playing!');
+      }
     } catch (err) {
       setError('Failed to fetch game info');
       console.error(err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Create a new game
+  const createGame = async () => {
+    if (!address) {
+      setError('Wallet not connected');
+      return;
+    }
+
+    try {
+      setCreateGameLoading(true);
+      setError(null);
+
+      // Get contract instance with signer
+      const { ethers } = await import('ethers');
+
+      const resolvedSigner = await signer;
+      if (!resolvedSigner) {
+        setError('Signer not available');
+        return;
+      }
+
+      const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, resolvedSigner);
+
+      // Create the game
+      const tx = await contract.createGame();
+      console.log('Transaction sent, waiting for confirmation...');
+      await tx.wait();
+
+      console.log('Game created successfully!');
+
+      // Refresh game info to show the new game
+      fetchGameInfo();
+    } catch (err: any) {
+      console.error('Failed to create game:', err);
+      setError(err.message || 'Failed to create game');
+    } finally {
+      setCreateGameLoading(false);
     }
   };
 
@@ -184,6 +250,41 @@ export function EncryptedCardGame() {
             </div>
 
             {/* Game Actions */}
+            {!gameInfo && isConnected && (
+              <div style={{
+                textAlign: 'center',
+                padding: '3rem',
+                backgroundColor: 'white',
+                borderRadius: '12px',
+                boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+                marginBottom: '2rem'
+              }}>
+                <h2 style={{ fontSize: '1.5rem', marginBottom: '1rem', color: '#374151' }}>
+                  No Games Available
+                </h2>
+                <p style={{ color: '#6b7280', marginBottom: '2rem' }}>
+                  Create a new game to start playing!
+                </p>
+                <button
+                  onClick={createGame}
+                  disabled={createGameLoading}
+                  style={{
+                    backgroundColor: createGameLoading ? '#9ca3af' : '#3b82f6',
+                    color: 'white',
+                    padding: '0.75rem 2rem',
+                    borderRadius: '6px',
+                    border: 'none',
+                    fontSize: '1rem',
+                    fontWeight: 'medium',
+                    cursor: createGameLoading ? 'not-allowed' : 'pointer',
+                    transition: 'background-color 0.2s'
+                  }}
+                >
+                  {createGameLoading ? 'Creating Game...' : 'Create New Game'}
+                </button>
+              </div>
+            )}
+
             {gameInfo && (
               <>
                 {canJoinGame() && (
