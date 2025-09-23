@@ -105,6 +105,7 @@ task("game:join", "Joins a game with encrypted cards")
   .addOptionalParam("address", "Optionally specify the EncryptedCardGameV2 contract address")
   .addParam("gameid", "The game ID to join")
   .addParam("cards", "Comma-separated list of 6 card types (0=Eagle, 1=Bear, 2=Snake)")
+  .addOptionalParam("account", "Account index to use (default: 0)", "0")
   .setAction(async function (taskArguments: TaskArguments, hre) {
     const { ethers, deployments, fhevm } = hre;
 
@@ -133,20 +134,22 @@ task("game:join", "Joins a game with encrypted cards")
       : await deployments.get("EncryptedCardGameV2");
     console.log(`EncryptedCardGameV2: ${CardGameDeployment.address}`);
 
+    const accountIndex = parseInt(taskArguments.account || "0");
     const signers = await ethers.getSigners();
+    const signer = signers[accountIndex];
     const cardGameContract = await ethers.getContractAt("EncryptedCardGameV2", CardGameDeployment.address);
 
-    console.log(`Joining game ${gameId} with card types: ${cardTypes.join(", ")}`);
+    console.log(`Joining game ${gameId} with card types: ${cardTypes.join(", ")} using account ${accountIndex} (${signer.address})`);
 
     // Encrypt the card types
-    const encryptedInput = fhevm.createEncryptedInput(CardGameDeployment.address, signers[0].address);
+    const encryptedInput = fhevm.createEncryptedInput(CardGameDeployment.address, signer.address);
     for (const cardType of cardTypes) {
       encryptedInput.add8(cardType);
     }
     const encryptedCards = await encryptedInput.encrypt();
 
     const tx = await cardGameContract
-      .connect(signers[0])
+      .connect(signer)
       .joinGame(gameId, encryptedCards.handles, encryptedCards.inputProof);
     console.log(`Wait for tx:${tx.hash}...`);
 
@@ -165,6 +168,7 @@ task("game:play", "Plays a card in the current round")
   .addOptionalParam("address", "Optionally specify the EncryptedCardGameV2 contract address")
   .addParam("gameid", "The game ID")
   .addParam("card", "The card index to play (0-5)")
+  .addOptionalParam("account", "Account index to use (default: 0)", "0")
   .setAction(async function (taskArguments: TaskArguments, hre) {
     const { ethers, deployments } = hre;
 
@@ -183,12 +187,14 @@ task("game:play", "Plays a card in the current round")
       : await deployments.get("EncryptedCardGameV2");
     console.log(`EncryptedCardGameV2: ${CardGameDeployment.address}`);
 
+    const accountIndex = parseInt(taskArguments.account || "0");
     const signers = await ethers.getSigners();
+    const signer = signers[accountIndex];
     const cardGameContract = await ethers.getContractAt("EncryptedCardGameV2", CardGameDeployment.address);
 
-    console.log(`Playing card ${cardIndex} in game ${gameId}`);
+    console.log(`Playing card ${cardIndex} in game ${gameId} using account ${accountIndex} (${signer.address})`);
 
-    const tx = await cardGameContract.connect(signers[0]).playCard(gameId, cardIndex);
+    const tx = await cardGameContract.connect(signer).playCard(gameId, cardIndex);
     console.log(`Wait for tx:${tx.hash}...`);
 
     const receipt = await tx.wait();
@@ -246,6 +252,7 @@ task("game:cards", "Gets player's cards in a game (requires decryption)")
   .addOptionalParam("address", "Optionally specify the EncryptedCardGameV2 contract address")
   .addParam("gameid", "The game ID")
   .addParam("player", "The player index (0 or 1)")
+  .addOptionalParam("account", "Account index to use for auth (default: same as player)", "")
   .setAction(async function (taskArguments: TaskArguments, hre) {
     const { ethers, deployments, fhevm } = hre;
 
@@ -266,7 +273,9 @@ task("game:cards", "Gets player's cards in a game (requires decryption)")
       : await deployments.get("EncryptedCardGameV2");
     console.log(`EncryptedCardGameV2: ${CardGameDeployment.address}`);
 
+    const accountIndex = taskArguments.account ? parseInt(taskArguments.account) : playerIndex;
     const signers = await ethers.getSigners();
+    const signer = signers[accountIndex];
     const cardGameContract = await ethers.getContractAt("EncryptedCardGameV2", CardGameDeployment.address);
 
     try {
@@ -285,7 +294,7 @@ task("game:cards", "Gets player's cards in a game (requires decryption)")
               FhevmType.euint8,
               playerCards.types[i],
               CardGameDeployment.address,
-              signers[0],
+              signer,
             );
             cardTypeName = cardTypeNames[decryptedType] || `Unknown(${decryptedType})`;
           }
