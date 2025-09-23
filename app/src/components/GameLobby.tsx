@@ -69,11 +69,6 @@ export function GameLobby({ onJoinGame }: GameLobbyProps) {
     setSelectedGameId(gameId);
   };
 
-  const handleJoinSelectedGame = () => {
-    if (selectedGameId) {
-      onJoinGame(selectedGameId);
-    }
-  };
 
   if (!isConnected) {
     return (

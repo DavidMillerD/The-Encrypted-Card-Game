@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { useAccount } from 'wagmi';
 import { CONTRACT_ADDRESS, CARD_TYPES, CARD_NAMES } from '../config/contracts';
 import { useEthersSigner } from '../hooks/useEthersSigner';

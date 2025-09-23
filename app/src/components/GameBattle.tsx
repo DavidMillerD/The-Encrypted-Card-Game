@@ -59,7 +59,7 @@ export function GameBattle({ gameId, playerIndex, onGameUpdate }: GameBattleProp
       if (!resolvedSigner) return;
 
       const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, resolvedSigner);
-      const [types, healths, aliveStatus] = await contract.getPlayerCards(BigInt(gameId), playerIndex);
+      const [, , aliveStatus] = await contract.getPlayerCards(BigInt(gameId), playerIndex);
 
       // 初始化我方卡牌为未解密状态
       const cards: DecryptedCard[] = [];
