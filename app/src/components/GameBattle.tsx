@@ -431,11 +431,22 @@ export function GameBattle({ gameId, playerIndex, onGameUpdate }: GameBattleProp
                 key={`my-${card.index}`}
                 card={card}
                 onClick={() => {
-                  if (card.type === -1 && card.isAlive) {
-                    // 未解密且存活的卡牌，点击解密
-                    decryptCard(card.index);
-                  } else if (card.type !== -1 && card.isAlive) {
-                    // 已解密且存活的卡牌，点击选中
+                  if (!card.isAlive) {
+                    console.log('Cannot select dead card');
+                    return;
+                  }
+
+                  if (card.type === -1) {
+                    // 未解密且存活的卡牌，可以选中或解密
+                    if (selectedCard === card.index) {
+                      // 如果已经选中，点击解密
+                      decryptCard(card.index);
+                    } else {
+                      // 否则选中这张卡
+                      setSelectedCard(card.index);
+                    }
+                  } else {
+                    // 已解密且存活的卡牌，点击选中/取消选中
                     setSelectedCard(selectedCard === card.index ? null : card.index);
                   }
                 }}
@@ -446,18 +457,21 @@ export function GameBattle({ gameId, playerIndex, onGameUpdate }: GameBattleProp
           {/* 操作按钮 */}
           <div style={{ textAlign: 'center' }}>
             <div style={{ marginBottom: '1rem' }}>
-              <p style={{ fontSize: '1.125rem', color: '#374151' }}>
+              {/* <p style={{ fontSize: '1.125rem', color: '#374151' }}>
                 <strong>我方存活卡牌: {myCards.filter(card => card.isAlive).length}/6</strong>
               </p>
               <p style={{ fontSize: '1.125rem', color: '#374151' }}>
                 <strong>对手存活卡牌: {opponentCards.filter(card => card.isAlive).length}/6</strong>
-              </p>
+              </p> */}
             </div>
 
             {selectedCard !== null && (
               <div>
                 <p style={{ fontSize: '0.875rem', color: '#6b7280', marginBottom: '1rem' }}>
-                  已选中卡牌 {selectedCard + 1}，点击"出牌"进行战斗
+                  已选中卡牌 {selectedCard + 1}
+                  {myCards[selectedCard]?.type === -1 && ' (未解密)'}
+                  ，点击"出牌"进行战斗
+                  {myCards[selectedCard]?.type === -1 && ' 或再次点击卡牌进行解密'}
                 </p>
                 <button
                   onClick={() => playCard(selectedCard)}
