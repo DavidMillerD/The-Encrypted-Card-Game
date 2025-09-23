@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAccount } from 'wagmi';
 import { CONTRACT_ADDRESS, CONTRACT_ABI, CARD_NAMES } from '../config/contracts';
 import { useEthersSigner } from '../hooks/useEthersSigner';
@@ -25,10 +25,19 @@ export function GameBoard({ gameInfo, gameId, playerIndex, onGameUpdate }: GameB
   const [loading, setLoading] = useState(false);
   const [cardsLoading, setCardsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [lastFetchTime, setLastFetchTime] = useState<number>(0);
+  const fetchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Fetch player cards
-  const fetchPlayerCards = async () => {
+  // Fetch player cards with caching to avoid repeated signatures
+  const fetchPlayerCards = useCallback(async (force = false) => {
     if (!instance || !address) return;
+
+    // Avoid fetching too frequently (minimum 5 seconds between fetches)
+    const now = Date.now();
+    if (!force && (now - lastFetchTime) < 5000) {
+      console.log('Skipping fetch - too soon since last fetch');
+      return;
+    }
 
     try {
       setCardsLoading(true);
@@ -103,6 +112,7 @@ export function GameBoard({ gameInfo, gameId, playerIndex, onGameUpdate }: GameB
       }
 
       setPlayerCards(cards);
+      setLastFetchTime(now);
       setError(null);
     } catch (err: any) {
       console.error('Failed to fetch player cards:', err);
@@ -110,7 +120,7 @@ export function GameBoard({ gameInfo, gameId, playerIndex, onGameUpdate }: GameB
     } finally {
       setCardsLoading(false);
     }
-  };
+  }, [instance, address, gameId, playerIndex, signer, lastFetchTime]);
 
 
   // Play a card
@@ -149,10 +159,15 @@ export function GameBoard({ gameInfo, gameId, playerIndex, onGameUpdate }: GameB
       setSelectedCard(null);
       onGameUpdate();
 
-      // Refresh cards after a short delay
-      setTimeout(() => {
-        fetchPlayerCards();
-      }, 2000);
+      // Clear any existing timeout
+      if (fetchTimeoutRef.current) {
+        clearTimeout(fetchTimeoutRef.current);
+      }
+
+      // Refresh cards after a delay (force refresh)
+      fetchTimeoutRef.current = setTimeout(() => {
+        fetchPlayerCards(true);
+      }, 3000);
     } catch (err: any) {
       console.error('Failed to play card:', err);
       setError(err.message || 'Failed to play card');
@@ -161,10 +176,19 @@ export function GameBoard({ gameInfo, gameId, playerIndex, onGameUpdate }: GameB
     }
   };
 
-  // Load cards when component mounts or player changes
+  // Load cards when component mounts or critical dependencies change
   useEffect(() => {
-    fetchPlayerCards();
-  }, [playerIndex, instance, address]);
+    fetchPlayerCards(true); // Force initial load
+  }, [gameId, playerIndex]); // Only re-fetch when game or player changes
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (fetchTimeoutRef.current) {
+        clearTimeout(fetchTimeoutRef.current);
+      }
+    };
+  }, []);
 
   const getCardEmoji = (cardType: number) => {
     switch (cardType) {
