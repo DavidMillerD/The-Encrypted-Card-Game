@@ -3,10 +3,9 @@ import { useAccount } from 'wagmi';
 import { CONTRACT_ADDRESS, CONTRACT_ABI, CARD_NAMES } from '../config/contracts';
 import { useEthersSigner } from '../hooks/useEthersSigner';
 import { useZamaInstance } from '../hooks/useZamaInstance';
-import type { GameInfo, Card } from './EncryptedCardGame';
+import type { Card } from './EncryptedCardGame';
 
 interface GameBoardProps {
-  gameInfo: GameInfo;
   gameId: number;
   playerIndex: number;
   onGameUpdate: () => void;
