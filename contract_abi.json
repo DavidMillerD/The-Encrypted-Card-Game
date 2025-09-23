@@ -1,9 +1,4 @@
-// EncryptedCardGameV2 contract - Multi-game room architecture
-// Updated with latest deployed V2 contract address
-export const CONTRACT_ADDRESS = '0xf41a3A0912498bcF28B4c494aF38E2f93a5797dA';
-
-// Generated ABI from contract artifacts - Auto-synced from EncryptedCardGameV2.json
-export const CONTRACT_ABI = [
+[
   {
     "anonymous": false,
     "inputs": [
@@ -335,32 +330,4 @@ export const CONTRACT_ABI = [
     "stateMutability": "pure",
     "type": "function"
   }
-] as const;
-
-// Card type constants
-export const CARD_TYPES = {
-  EAGLE: 0,
-  BEAR: 1,
-  SNAKE: 2
-} as const;
-
-// Game state constants
-export const GAME_STATE = {
-  WAITING: 0,
-  PLAYING: 1,
-  FINISHED: 2
-} as const;
-
-// Card type names for display
-export const CARD_NAMES = {
-  [CARD_TYPES.EAGLE]: 'Eagle',
-  [CARD_TYPES.BEAR]: 'Bear',
-  [CARD_TYPES.SNAKE]: 'Snake'
-} as const;
-
-// Battle result constants
-export const BATTLE_RESULT = {
-  DRAW: 0,
-  PLAYER1_WINS: 1,
-  PLAYER2_WINS: 2
-} as const;
+]

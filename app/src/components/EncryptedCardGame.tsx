@@ -3,6 +3,7 @@ import { useAccount, usePublicClient } from 'wagmi';
 import { Header } from './Header';
 import { JoinGame } from './JoinGame';
 import { GameBoard } from './GameBoard';
+import { GameList } from './GameList';
 import { CONTRACT_ADDRESS, CONTRACT_ABI, GAME_STATE } from '../config/contracts';
 import { useEthersSigner } from '../hooks/useEthersSigner';
 
@@ -26,6 +27,7 @@ export function EncryptedCardGame() {
   const signer = useEthersSigner();
   const [gameInfo, setGameInfo] = useState<GameInfo | null>(null);
   const [currentGameId, setCurrentGameId] = useState<number>(0);
+  const [selectedGameId, setSelectedGameId] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [createGameLoading, setCreateGameLoading] = useState(false);
@@ -49,21 +51,30 @@ export function EncryptedCardGame() {
     }
   };
 
-  // Fetch game info
-  const fetchGameInfo = useCallback(async () => {
+  // Fetch game info for specific game ID
+  const fetchGameInfo = useCallback(async (gameIdToFetch?: number, forceRefreshGameId = false) => {
     if (!publicClient) return;
 
     try {
       setLoading(true);
 
-      // First try to use current game ID, then get player's game ID
-      let gameId = currentGameId;
-      if (gameId === 0 && address) {
+      let gameId = gameIdToFetch || currentGameId;
+
+      // If no specific game ID provided and we need to refresh, get player's current game
+      if (!gameIdToFetch && (forceRefreshGameId || (gameId === 0 && address))) {
         gameId = await getPlayerGameId();
-        // Don't update currentGameId here to avoid infinite loop
+        // Update currentGameId if we got a new one
+        if (gameId !== currentGameId) {
+          setCurrentGameId(gameId);
+        }
       }
 
-      // If gameId is still 0, user hasn't joined any game yet, try to get the latest available game
+      // If we have a selected game from the list, use that
+      if (selectedGameId && !gameIdToFetch) {
+        gameId = selectedGameId;
+      }
+
+      // If gameId is still 0, try to get the latest available game
       if (gameId === 0) {
         try {
           const nextGameId = await publicClient.readContract({
@@ -88,13 +99,19 @@ export function EncryptedCardGame() {
           args: [BigInt(gameId)],
         }) as [number, number, number, string, string];
 
-        setGameInfo({
+        const newGameInfo = {
           state: result[0],
           round: result[1],
           joined: result[2],
           player1: result[3],
           player2: result[4],
-        });
+        };
+
+        console.log('Game info updated:', newGameInfo);
+        console.log('Current user address:', address);
+        console.log('Player index:', getPlayerIndex());
+
+        setGameInfo(newGameInfo);
         setError(null);
       } catch (gameErr) {
         // Game doesn't exist, set gameInfo to null so we can show "create game" option
@@ -107,7 +124,7 @@ export function EncryptedCardGame() {
     } finally {
       setLoading(false);
     }
-  }, [publicClient, address, currentGameId]);
+  }, [publicClient, address, currentGameId, selectedGameId]);
 
   // Create a new game
   const createGame = async () => {
@@ -150,7 +167,8 @@ export function EncryptedCardGame() {
       }
 
       // Refresh game info to show the new game
-      fetchGameInfo();
+      setSelectedGameId(newGameId);
+      fetchGameInfo(newGameId);
     } catch (err: any) {
       console.error('Failed to create game:', err);
       setError(err.message || 'Failed to create game');
@@ -173,6 +191,13 @@ export function EncryptedCardGame() {
            gameInfo.state === GAME_STATE.WAITING &&
            gameInfo.joined < 2 &&
            getPlayerIndex() === -1;
+  };
+
+  // Handle game selection from the game list
+  const handleGameSelect = (gameId: number) => {
+    setSelectedGameId(gameId);
+    setCurrentGameId(gameId);
+    fetchGameInfo(gameId);
   };
 
   // Fetch game info when connected
@@ -222,89 +247,96 @@ export function EncryptedCardGame() {
           </div>
         ) : (
           <>
-            {/* Game Status */}
-            <div style={{
-              backgroundColor: 'white',
-              padding: '1.5rem',
-              borderRadius: '12px',
-              boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
-              marginBottom: '2rem'
-            }}>
-              <h2 style={{ fontSize: '1.25rem', fontWeight: 'bold', marginBottom: '1rem', color: '#374151' }}>
-                Game Status
-              </h2>
-              {loading ? (
-                <p style={{ color: '#6b7280' }}>Loading...</p>
-              ) : error ? (
-                <p style={{ color: '#dc2626' }}>{error}</p>
-              ) : gameInfo ? (
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
-                  <div>
-                    <strong>State:</strong> {getGameStateText(gameInfo.state)}
-                  </div>
-                  <div>
-                    <strong>Players:</strong> {gameInfo.joined}/2
-                  </div>
-                  <div>
-                    <strong>Round:</strong> {gameInfo.round}
-                  </div>
-                  <div>
-                    <strong>Your Position:</strong> {
-                      getPlayerIndex() === -1 ? 'Spectator' : `Player ${getPlayerIndex() + 1}`
-                    }
-                  </div>
-                </div>
-              ) : null}
-            </div>
+            {/* Game List */}
+            <GameList
+              onSelectGame={handleGameSelect}
+              selectedGameId={selectedGameId}
+              currentUserAddress={address}
+            />
 
-            {/* Game Actions */}
-            {!gameInfo && isConnected && (
+            {/* Current Game Status */}
+            {(selectedGameId || currentGameId > 0) && (
               <div style={{
-                textAlign: 'center',
-                padding: '3rem',
                 backgroundColor: 'white',
+                padding: '1.5rem',
                 borderRadius: '12px',
                 boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
                 marginBottom: '2rem'
               }}>
-                <h2 style={{ fontSize: '1.5rem', marginBottom: '1rem', color: '#374151' }}>
-                  No Games Available
+                <h2 style={{ fontSize: '1.25rem', fontWeight: 'bold', marginBottom: '1rem', color: '#374151' }}>
+                  Current Game #{selectedGameId || currentGameId} - Status
                 </h2>
-                <p style={{ color: '#6b7280', marginBottom: '2rem' }}>
-                  Create a new game to start playing!
-                </p>
-                <button
-                  onClick={createGame}
-                  disabled={createGameLoading}
-                  style={{
-                    backgroundColor: createGameLoading ? '#9ca3af' : '#3b82f6',
-                    color: 'white',
-                    padding: '0.75rem 2rem',
-                    borderRadius: '6px',
-                    border: 'none',
-                    fontSize: '1rem',
-                    fontWeight: 'medium',
-                    cursor: createGameLoading ? 'not-allowed' : 'pointer',
-                    transition: 'background-color 0.2s'
-                  }}
-                >
-                  {createGameLoading ? 'Creating Game...' : 'Create New Game'}
-                </button>
+                {loading ? (
+                  <p style={{ color: '#6b7280' }}>Loading...</p>
+                ) : error ? (
+                  <p style={{ color: '#dc2626' }}>{error}</p>
+                ) : gameInfo ? (
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
+                    <div>
+                      <strong>State:</strong> {getGameStateText(gameInfo.state)}
+                    </div>
+                    <div>
+                      <strong>Players:</strong> {gameInfo.joined}/2
+                    </div>
+                    <div>
+                      <strong>Round:</strong> {gameInfo.round}
+                    </div>
+                    <div>
+                      <strong>Your Position:</strong> {
+                        getPlayerIndex() === -1 ? 'Spectator' : `Player ${getPlayerIndex() + 1}`
+                      }
+                    </div>
+                  </div>
+                ) : null}
               </div>
             )}
 
-            {gameInfo && (
+            {/* Create New Game Action */}
+            <div style={{
+              textAlign: 'center',
+              padding: '2rem',
+              backgroundColor: 'white',
+              borderRadius: '12px',
+              boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+              marginBottom: '2rem'
+            }}>
+              <h2 style={{ fontSize: '1.25rem', marginBottom: '1rem', color: '#374151' }}>
+                Create New Game
+              </h2>
+              <p style={{ color: '#6b7280', marginBottom: '1.5rem' }}>
+                Start a new game and invite others to join!
+              </p>
+              <button
+                onClick={createGame}
+                disabled={createGameLoading}
+                style={{
+                  backgroundColor: createGameLoading ? '#9ca3af' : '#10b981',
+                  color: 'white',
+                  padding: '0.75rem 2rem',
+                  borderRadius: '6px',
+                  border: 'none',
+                  fontSize: '1rem',
+                  fontWeight: 'medium',
+                  cursor: createGameLoading ? 'not-allowed' : 'pointer',
+                  transition: 'background-color 0.2s'
+                }}
+              >
+                {createGameLoading ? 'Creating Game...' : '+ Create New Game'}
+              </button>
+            </div>
+
+            {gameInfo && (selectedGameId || currentGameId > 0) && (
               <>
                 {canJoinGame() && (
-                  <JoinGame gameId={currentGameId} onJoinSuccess={fetchGameInfo} />
+                  <JoinGame gameId={selectedGameId || currentGameId} onJoinSuccess={() => fetchGameInfo(selectedGameId || currentGameId, true)} />
                 )}
 
                 {getPlayerIndex() !== -1 && gameInfo.state === GAME_STATE.PLAYING && (
                   <GameBoard
                     gameInfo={gameInfo}
-                    gameId={currentGameId}
+                    gameId={selectedGameId || currentGameId}
                     playerIndex={getPlayerIndex()}
-                    onGameUpdate={fetchGameInfo}
+                    onGameUpdate={() => fetchGameInfo(selectedGameId || currentGameId)}
                   />
                 )}
 
