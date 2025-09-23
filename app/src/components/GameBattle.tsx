@@ -171,10 +171,9 @@ export function GameBattle({ gameId, playerIndex, onGameUpdate }: GameBattleProp
         aliveStatus: aliveStatus.map((a: any) => a.toString())
       });
 
+      // Only types are encrypted, healths and aliveStatus are plaintext
       const handleContractPairs = [
-        { handle: types[cardIndex], contractAddress: CONTRACT_ADDRESS },
-        { handle: healths[cardIndex], contractAddress: CONTRACT_ADDRESS },
-        { handle: aliveStatus[cardIndex], contractAddress: CONTRACT_ADDRESS }
+        { handle: types[cardIndex], contractAddress: CONTRACT_ADDRESS }
       ];
 
       console.log(`[DECRYPT] Handle contract pairs:`, handleContractPairs);
@@ -211,9 +210,9 @@ export function GameBattle({ gameId, playerIndex, onGameUpdate }: GameBattleProp
 
       console.log(`[DECRYPT] Decryption result:`, result);
 
-      const cardType = result[types[cardIndex]];
-      const cardHealth = result[healths[cardIndex]];
-      const isAlive = result[aliveStatus[cardIndex]];
+      const cardType = result[types[cardIndex]]; // Decrypted
+      const cardHealth = healths[cardIndex]; // Already plaintext
+      const isAlive = aliveStatus[cardIndex]; // Already plaintext
 
       console.log(`[DECRYPT] Parsed values:`, {
         cardType: Number(cardType),
