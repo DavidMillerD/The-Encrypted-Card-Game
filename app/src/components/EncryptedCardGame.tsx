@@ -56,14 +56,14 @@ export function EncryptedCardGame() {
     try {
       setLoading(true);
 
-      // First get the player's current game ID
-      let gameId = 0;
-      if (address) {
+      // First try to use current game ID, then get player's game ID
+      let gameId = currentGameId;
+      if (gameId === 0 && address) {
         gameId = await getPlayerGameId();
-        setCurrentGameId(gameId);
+        // Don't update currentGameId here to avoid infinite loop
       }
 
-      // If gameId is 0, user hasn't joined any game yet, try to get the latest available game
+      // If gameId is still 0, user hasn't joined any game yet, try to get the latest available game
       if (gameId === 0) {
         try {
           const nextGameId = await publicClient.readContract({
@@ -75,7 +75,6 @@ export function EncryptedCardGame() {
           // Use the latest game (nextGameId - 1) or 1 if no games exist
           // Game IDs start from 1, not 0
           gameId = Number(nextGameId) > 1 ? Number(nextGameId) - 1 : 1;
-          setCurrentGameId(gameId);
         } catch {
           gameId = 1; // Default to game 1
         }
@@ -108,7 +107,7 @@ export function EncryptedCardGame() {
     } finally {
       setLoading(false);
     }
-  }, [publicClient, address]);
+  }, [publicClient, address, currentGameId]);
 
   // Create a new game
   const createGame = async () => {
@@ -135,9 +134,20 @@ export function EncryptedCardGame() {
       // Create the game
       const tx = await contract.createGame();
       console.log('Transaction sent, waiting for confirmation...');
-      await tx.wait();
+      const receipt = await tx.wait();
 
       console.log('Game created successfully!');
+
+      // Get the new game ID from the transaction events
+      const gameCreatedEvent = receipt.logs.find((log: any) =>
+        log.fragment && log.fragment.name === 'GameCreated'
+      );
+
+      if (gameCreatedEvent) {
+        const newGameId = Number(gameCreatedEvent.args[0]);
+        setCurrentGameId(newGameId);
+        console.log('New game ID:', newGameId);
+      }
 
       // Refresh game info to show the new game
       fetchGameInfo();
