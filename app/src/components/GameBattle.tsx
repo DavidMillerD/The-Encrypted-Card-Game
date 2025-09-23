@@ -38,7 +38,20 @@ export function GameBattle({ gameId, playerIndex, onGameUpdate }: GameBattleProp
 
   // 获取我方卡牌信息
   const fetchMyCards = useCallback(async () => {
-    if (!instance || !address) return;
+    if (!address) {
+      // 如果没有连接钱包，显示默认的6张卡牌
+      const cards: DecryptedCard[] = [];
+      for (let i = 0; i < 6; i++) {
+        cards.push({
+          index: i,
+          type: -1, // -1 表示未解密
+          health: -1,
+          isAlive: true // 默认显示为存活
+        });
+      }
+      setMyCards(cards);
+      return;
+    }
 
     try {
       const { ethers } = await import('ethers');
@@ -63,12 +76,34 @@ export function GameBattle({ gameId, playerIndex, onGameUpdate }: GameBattleProp
     } catch (err: any) {
       console.error('Failed to fetch my cards:', err);
       setError('Failed to load cards');
+      // 出错时也显示6张默认卡牌
+      const cards: DecryptedCard[] = [];
+      for (let i = 0; i < 6; i++) {
+        cards.push({
+          index: i,
+          type: -1,
+          health: -1,
+          isAlive: true
+        });
+      }
+      setMyCards(cards);
     }
-  }, [instance, address, gameId, playerIndex, signer]);
+  }, [address, gameId, playerIndex, signer]);
 
   // 获取对手卡牌信息（只显示存活状态）
   const fetchOpponentCards = useCallback(async () => {
-    if (!instance || !address) return;
+    if (!address) {
+      // 如果没有连接钱包，显示默认的6张卡牌
+      const cards: OpponentCard[] = [];
+      for (let i = 0; i < 6; i++) {
+        cards.push({
+          index: i,
+          isAlive: true // 默认显示为存活
+        });
+      }
+      setOpponentCards(cards);
+      return;
+    }
 
     try {
       const { ethers } = await import('ethers');
@@ -89,8 +124,17 @@ export function GameBattle({ gameId, playerIndex, onGameUpdate }: GameBattleProp
       setOpponentCards(cards);
     } catch (err: any) {
       console.error('Failed to fetch opponent cards:', err);
+      // 出错时也显示6张默认卡牌
+      const cards: OpponentCard[] = [];
+      for (let i = 0; i < 6; i++) {
+        cards.push({
+          index: i,
+          isAlive: true
+        });
+      }
+      setOpponentCards(cards);
     }
-  }, [instance, address, gameId, opponentIndex, signer]);
+  }, [address, gameId, opponentIndex, signer]);
 
   // 解密指定卡牌
   const decryptCard = async (cardIndex: number) => {
@@ -220,16 +264,16 @@ export function GameBattle({ gameId, playerIndex, onGameUpdate }: GameBattleProp
       <div
         onClick={onClick}
         style={{
-          border: isSelected ? '3px solid #3b82f6' : card.isAlive ? '2px solid #10b981' : '2px solid #ef4444',
-          borderRadius: '12px',
-          padding: '1rem',
+          border: isSelected ? '2px solid #3b82f6' : card.isAlive ? '1px solid #10b981' : '1px solid #ef4444',
+          borderRadius: '8px',
+          padding: '0.5rem',
           backgroundColor: card.isAlive ? '#f0fdf4' : '#fef2f2',
           cursor: onClick ? 'pointer' : 'default',
           opacity: card.isAlive ? 1 : 0.6,
           transition: 'all 0.2s ease',
           position: 'relative',
           aspectRatio: '2/3',
-          minHeight: '180px',
+          minHeight: '90px',
           display: 'flex',
           flexDirection: 'column',
           justifyContent: 'center',
@@ -257,7 +301,7 @@ export function GameBattle({ gameId, playerIndex, onGameUpdate }: GameBattleProp
         )}
 
         <div style={{ textAlign: 'center' }}>
-          <div style={{ fontSize: '3rem', marginBottom: '0.5rem' }}>
+          <div style={{ fontSize: '1.5rem', marginBottom: '0.25rem' }}>
             {isOpponent
               ? getCardEmoji(0, true)
               : isDecrypted
@@ -268,25 +312,25 @@ export function GameBattle({ gameId, playerIndex, onGameUpdate }: GameBattleProp
 
           {!isOpponent && isDecrypted && (
             <>
-              <div style={{ fontSize: '1rem', fontWeight: 'bold', marginBottom: '0.5rem', color: '#374151' }}>
+              <div style={{ fontSize: '0.625rem', fontWeight: 'bold', marginBottom: '0.25rem', color: '#374151' }}>
                 {CARD_NAMES[(card as DecryptedCard).type as keyof typeof CARD_NAMES]}
               </div>
-              <div style={{ fontSize: '0.875rem', color: '#6b7280' }}>
+              <div style={{ fontSize: '0.5rem', color: '#6b7280' }}>
                 {(card as DecryptedCard).health} HP
               </div>
             </>
           )}
 
           {!isOpponent && !isDecrypted && (
-            <div style={{ fontSize: '0.875rem', color: '#6b7280', marginTop: '0.5rem' }}>
+            <div style={{ fontSize: '0.5rem', color: '#6b7280', marginTop: '0.25rem' }}>
               点击解密
             </div>
           )}
 
           <div style={{
-            fontSize: '0.75rem',
+            fontSize: '0.5rem',
             fontWeight: 'bold',
-            marginTop: '0.5rem',
+            marginTop: '0.25rem',
             color: card.isAlive ? '#10b981' : '#ef4444'
           }}>
             {card.isAlive ? 'ALIVE' : 'DEAD'}
@@ -317,8 +361,8 @@ export function GameBattle({ gameId, playerIndex, onGameUpdate }: GameBattleProp
           </h2>
           <div style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))',
-            gap: '1rem'
+            gridTemplateColumns: 'repeat(auto-fill, minmax(100px, 1fr))',
+            gap: '0.5rem'
           }}>
             {opponentCards.map((card) => (
               <CardComponent
@@ -343,8 +387,8 @@ export function GameBattle({ gameId, playerIndex, onGameUpdate }: GameBattleProp
           </h2>
           <div style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))',
-            gap: '1rem',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(100px, 1fr))',
+            gap: '0.5rem',
             marginBottom: '2rem'
           }}>
             {myCards.map((card) => (

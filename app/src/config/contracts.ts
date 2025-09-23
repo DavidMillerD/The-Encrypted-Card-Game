@@ -1,6 +1,6 @@
 // EncryptedCardGameV2 contract - Multi-game room architecture
 // Updated with latest deployed V2 contract address
-export const CONTRACT_ADDRESS = '0xf41a3A0912498bcF28B4c494aF38E2f93a5797dA';
+export const CONTRACT_ADDRESS = '0x3fc95C2bCfb72703cB024623ED6c621b828D655D';
 
 // Generated ABI from contract artifacts - Auto-synced from EncryptedCardGameV2.json
 export const CONTRACT_ABI = [
