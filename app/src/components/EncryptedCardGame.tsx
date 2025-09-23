@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useAccount, usePublicClient } from 'wagmi';
 import { Header } from './Header';
 import { JoinGame } from './JoinGame';
@@ -50,14 +50,14 @@ export function EncryptedCardGame() {
   };
 
   // Fetch game info
-  const fetchGameInfo = async () => {
+  const fetchGameInfo = useCallback(async () => {
     if (!publicClient) return;
 
     try {
       setLoading(true);
 
       // First get the player's current game ID
-      let gameId = currentGameId;
+      let gameId = 0;
       if (address) {
         gameId = await getPlayerGameId();
         setCurrentGameId(gameId);
@@ -108,7 +108,7 @@ export function EncryptedCardGame() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [publicClient, address]);
 
   // Create a new game
   const createGame = async () => {
@@ -165,14 +165,12 @@ export function EncryptedCardGame() {
            getPlayerIndex() === -1;
   };
 
-  // Refresh game info every 5 seconds
+  // Fetch game info when connected
   useEffect(() => {
     if (isConnected) {
       fetchGameInfo();
-      const interval = setInterval(fetchGameInfo, 5000);
-      return () => clearInterval(interval);
     }
-  }, [isConnected, publicClient]);
+  }, [isConnected, fetchGameInfo]);
 
   const getGameStateText = (state: number) => {
     switch (state) {
