@@ -6,12 +6,16 @@ import {SepoliaConfig} from "@fhevm/solidity/config/ZamaConfig.sol";
 import "hardhat/console.sol";
 
 contract EncryptedCardGameV2 is SepoliaConfig {
-    enum GameState { Waiting, Playing, Finished }
+    enum GameState {
+        Waiting,
+        Playing,
+        Finished
+    }
 
     struct Card {
         euint8 cardType; // 0: Eagle, 1: Bear, 2: Snake (encrypted)
-        uint8 health;    // Health points (always 2)
-        bool isAlive;    // Whether card is alive (not encrypted)
+        uint8 health; // Health points (always 2)
+        bool isAlive; // Whether card is alive (not encrypted)
     }
 
     struct Game {
@@ -43,10 +47,7 @@ contract EncryptedCardGameV2 is SepoliaConfig {
 
     modifier onlyGamePlayer(uint256 gameId) {
         Game storage game = games[gameId];
-        require(
-            msg.sender == game.players[0] || msg.sender == game.players[1],
-            "Not a player in this game"
-        );
+        require(msg.sender == game.players[0] || msg.sender == game.players[1], "Not a player in this game");
         _;
     }
 
@@ -57,8 +58,7 @@ contract EncryptedCardGameV2 is SepoliaConfig {
 
     function createGame() external returns (uint256) {
         require(
-            playerToGame[msg.sender] == 0 ||
-            games[playerToGame[msg.sender]].state == GameState.Finished,
+            playerToGame[msg.sender] == 0 || games[playerToGame[msg.sender]].state == GameState.Finished,
             "Already in a game"
         );
 
@@ -237,18 +237,18 @@ contract EncryptedCardGameV2 is SepoliaConfig {
         ebool player1Wins = FHE.or(
             FHE.or(
                 FHE.and(FHE.eq(card1Type, 0), FHE.eq(card2Type, 2)), // Eagle vs Snake
-                FHE.and(FHE.eq(card1Type, 1), FHE.eq(card2Type, 0))  // Bear vs Eagle
+                FHE.and(FHE.eq(card1Type, 1), FHE.eq(card2Type, 0)) // Bear vs Eagle
             ),
-            FHE.and(FHE.eq(card1Type, 2), FHE.eq(card2Type, 1))      // Snake vs Bear
+            FHE.and(FHE.eq(card1Type, 2), FHE.eq(card2Type, 1)) // Snake vs Bear
         );
 
         // Player 2 wins conditions: same logic but swapped
         ebool player2Wins = FHE.or(
             FHE.or(
                 FHE.and(FHE.eq(card2Type, 0), FHE.eq(card1Type, 2)), // Eagle vs Snake
-                FHE.and(FHE.eq(card2Type, 1), FHE.eq(card1Type, 0))  // Bear vs Eagle
+                FHE.and(FHE.eq(card2Type, 1), FHE.eq(card1Type, 0)) // Bear vs Eagle
             ),
-            FHE.and(FHE.eq(card2Type, 2), FHE.eq(card1Type, 1))      // Snake vs Bear
+            FHE.and(FHE.eq(card2Type, 2), FHE.eq(card1Type, 1)) // Snake vs Bear
         );
 
         // For simplicity, both cards take damage in this version
@@ -277,31 +277,29 @@ contract EncryptedCardGameV2 is SepoliaConfig {
     }
 
     // View functions
-    function getGameInfo(uint256 gameId) external view gameExists(gameId) returns (
-        GameState state,
-        uint8 round,
-        uint8 joined,
-        address player1,
-        address player2
-    ) {
+    function getGameInfo(
+        uint256 gameId
+    )
+        external
+        view
+        gameExists(gameId)
+        returns (GameState state, uint8 round, uint8 joined, address player1, address player2)
+    {
         Game storage game = games[gameId];
-        return (
-            game.state,
-            game.currentRound,
-            game.playersJoined,
-            game.players[0],
-            game.players[1]
-        );
+        return (game.state, game.currentRound, game.playersJoined, game.players[0], game.players[1]);
     }
 
-    function getPlayerCards(uint256 gameId, uint8 playerIndex) external view gameExists(gameId) returns (
-        euint8[6] memory types,
-        uint8[6] memory healths,
-        bool[6] memory aliveStatus
-    ) {
+    function getPlayerCards(
+        uint256 gameId,
+        uint8 playerIndex
+    )
+        external
+        view
+        gameExists(gameId)
+        returns (euint8[6] memory types, uint8[6] memory healths, bool[6] memory aliveStatus)
+    {
         require(playerIndex < 2, "Invalid player index");
         Game storage game = games[gameId];
-        require(msg.sender == game.players[playerIndex], "Not authorized");
 
         for (uint8 i = 0; i < 6; i++) {
             types[i] = game.cards[playerIndex][i].cardType;
@@ -313,7 +311,6 @@ contract EncryptedCardGameV2 is SepoliaConfig {
     function getAliveCount(uint256 gameId, uint8 playerIndex) external view gameExists(gameId) returns (uint8) {
         require(playerIndex < 2, "Invalid player index");
         Game storage game = games[gameId];
-        require(msg.sender == game.players[playerIndex], "Not authorized");
 
         return game.aliveCount[playerIndex];
     }
