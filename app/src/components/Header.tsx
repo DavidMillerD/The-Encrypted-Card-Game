@@ -8,11 +8,9 @@ export function Header() {
         <div className="header-content">
           <div className="header-left">
             <h1 className="header-title">
-              
+              Encrypted Card Game
             </h1>
-            <span className="header-badge">
-              Confidential
-            </span>
+           
           </div>
           <ConnectButton />
         </div>

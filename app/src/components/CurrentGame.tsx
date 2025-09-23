@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAccount, usePublicClient } from 'wagmi';
 import { JoinGame } from './JoinGame';
-import { GameBoard } from './GameBoard';
+import { GameBattle } from './GameBattle';
 import { CONTRACT_ADDRESS, CONTRACT_ABI, GAME_STATE } from '../config/contracts';
 import type { GameInfo } from './EncryptedCardGame';
 
@@ -76,16 +76,6 @@ export function CurrentGame({ gameId, onBackToLobby }: CurrentGameProps) {
     }
   }, [gameId, fetchGameInfo]);
 
-  // Auto-refresh game info periodically
-  useEffect(() => {
-    if (gameId === 0) return;
-
-    const interval = setInterval(() => {
-      fetchGameInfo();
-    }, 5000); // Refresh every 5 seconds
-
-    return () => clearInterval(interval);
-  }, [gameId, fetchGameInfo]);
 
   const getGameStateText = (state: number) => {
     switch (state) {
@@ -248,7 +238,7 @@ export function CurrentGame({ gameId, onBackToLobby }: CurrentGameProps) {
           )}
 
           {getPlayerIndex() !== -1 && gameInfo.state === GAME_STATE.PLAYING && (
-            <GameBoard
+            <GameBattle
               gameId={gameId}
               playerIndex={getPlayerIndex()}
               onGameUpdate={fetchGameInfo}
