@@ -16,7 +16,7 @@ interface DecryptedCard extends Card {
   index: number;
 }
 
-export function GameBoard({ gameInfo, gameId, playerIndex, onGameUpdate }: GameBoardProps) {
+export function GameBoard({ gameId, playerIndex, onGameUpdate }: GameBoardProps) {
   const { address } = useAccount();
   const signer = useEthersSigner();
   const { instance } = useZamaInstance();

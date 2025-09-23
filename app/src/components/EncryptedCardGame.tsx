@@ -264,7 +264,7 @@ export function EncryptedCardGame() {
                 marginBottom: '2rem'
               }}>
                 <h2 style={{ fontSize: '1.25rem', fontWeight: 'bold', marginBottom: '1rem', color: '#374151' }}>
-                  Current Game #{selectedGameId || currentGameId} - Status
+                  Your Game #{selectedGameId || currentGameId} - Status
                 </h2>
                 {loading ? (
                   <p style={{ color: '#6b7280' }}>Loading...</p>
@@ -291,39 +291,6 @@ export function EncryptedCardGame() {
               </div>
             )}
 
-            {/* Create New Game Action */}
-            <div style={{
-              textAlign: 'center',
-              padding: '2rem',
-              backgroundColor: 'white',
-              borderRadius: '12px',
-              boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
-              marginBottom: '2rem'
-            }}>
-              <h2 style={{ fontSize: '1.25rem', marginBottom: '1rem', color: '#374151' }}>
-                Create New Game
-              </h2>
-              <p style={{ color: '#6b7280', marginBottom: '1.5rem' }}>
-                Start a new game and invite others to join!
-              </p>
-              <button
-                onClick={createGame}
-                disabled={createGameLoading}
-                style={{
-                  backgroundColor: createGameLoading ? '#9ca3af' : '#10b981',
-                  color: 'white',
-                  padding: '0.75rem 2rem',
-                  borderRadius: '6px',
-                  border: 'none',
-                  fontSize: '1rem',
-                  fontWeight: 'medium',
-                  cursor: createGameLoading ? 'not-allowed' : 'pointer',
-                  transition: 'background-color 0.2s'
-                }}
-              >
-                {createGameLoading ? 'Creating Game...' : '+ Create New Game'}
-              </button>
-            </div>
 
             {gameInfo && (selectedGameId || currentGameId > 0) && (
               <>
@@ -333,7 +300,6 @@ export function EncryptedCardGame() {
 
                 {getPlayerIndex() !== -1 && gameInfo.state === GAME_STATE.PLAYING && (
                   <GameBoard
-                    gameInfo={gameInfo}
                     gameId={selectedGameId || currentGameId}
                     playerIndex={getPlayerIndex()}
                     onGameUpdate={() => fetchGameInfo(selectedGameId || currentGameId)}
@@ -375,6 +341,40 @@ export function EncryptedCardGame() {
                 )}
               </>
             )}
+
+            {/* Create New Game Action - Moved to bottom */}
+            <div style={{
+              textAlign: 'center',
+              padding: '2rem',
+              backgroundColor: 'white',
+              borderRadius: '12px',
+              boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+              marginTop: '2rem'
+            }}>
+              <h2 style={{ fontSize: '1.25rem', marginBottom: '1rem', color: '#374151' }}>
+                Create New Game
+              </h2>
+              <p style={{ color: '#6b7280', marginBottom: '1.5rem' }}>
+                Start a new game and invite others to join!
+              </p>
+              <button
+                onClick={createGame}
+                disabled={createGameLoading}
+                style={{
+                  backgroundColor: createGameLoading ? '#9ca3af' : '#10b981',
+                  color: 'white',
+                  padding: '0.75rem 2rem',
+                  borderRadius: '6px',
+                  border: 'none',
+                  fontSize: '1rem',
+                  fontWeight: 'medium',
+                  cursor: createGameLoading ? 'not-allowed' : 'pointer',
+                  transition: 'background-color 0.2s'
+                }}
+              >
+                {createGameLoading ? 'Creating Game...' : '+ Create New Game'}
+              </button>
+            </div>
           </>
         )}
       </div>
